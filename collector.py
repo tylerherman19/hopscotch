@@ -154,7 +154,7 @@ def poll_cycle(state):
                     delay_samples.setdefault(tid, []).append(at - (mid + sched["t"][si]))
                 if at >= ts - 30 and u.stop_id:
                     fut.append((u.stop_id, at))
-                    stop_preds.setdefault(u.stop_id, []).append([tu.trip.route_id, at - ts, at])
+                    stop_preds.setdefault(u.stop_id, []).append([tu.trip.route_id, at - ts, at, tid])
         fut.sort(key=lambda x: x[1])
         trip_next[tid] = [{"stop": s, "at": a, "in": a - ts,
                            "name": stops_map.get(s, [""])[0]} for s, a in fut[:6]]
@@ -457,7 +457,7 @@ def supplement_hot_stop_preds(stop_preds, calendar, ts):
                 # skip if an RT prediction for this route sits within 4 min (same trip)
                 if any(p[0] == rid and abs(p[2] - at) < 240 for p in merged):
                     continue
-                merged.append([rid, at - ts, at])
+                merged.append([rid, at - ts, at, str(tid)])
                 need -= 1
                 if need <= 0:
                     break
