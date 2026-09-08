@@ -509,6 +509,21 @@ function legLive(leg) {
   return "";
 }
 
+function findVehicleForPrediction(route, stopId, arrivalEpoch, tripId) {
+  if (tripId != null) {
+    const exact = (S.live?.vehicles || []).find((v) => String(v.trip) === String(tripId));
+    if (exact) return exact;
+  }
+  const closest = (S.live?.vehicles || [])
+    .filter((v) => v.route === route)
+    .map((v) => {
+      const atStop = (v.next || []).find((n) => String(n.stop) === String(stopId));
+      return { vehicle: v, gap: atStop ? Math.abs(atStop.at - arrivalEpoch) : Infinity };
+    })
+    .sort((a, b) => a.gap - b.gap)[0];
+  return closest && closest.gap <= 600 ? closest.vehicle : null;
+}
+
 function nextBusForTrip(trip) {
   const leg = trip?.legs.find((l) => l.kind === "bus");
   if (!leg || !S.live) return null;
@@ -517,22 +532,11 @@ function nextBusForTrip(trip) {
     .sort((a, b) => a[2] - b[2]);
   const prediction = predictions[0];
   if (!prediction) return null;
-
-  let vehicle = (S.live.vehicles || []).find((v) =>
-    prediction[3] != null && String(v.trip) === String(prediction[3])
+  const vehicle = findVehicleForPrediction(
+    prediction[0], leg.board, prediction[2], prediction[3]
   );
-  if (!vehicle) {
-    vehicle = (S.live.vehicles || [])
-      .filter((v) => v.route === prediction[0])
-      .map((v) => {
-        const atStop = (v.next || []).find((n) => String(n.stop) === String(leg.board));
-        return { vehicle: v, gap: atStop ? Math.abs(atStop.at - prediction[2]) : Infinity };
-      })
-      .filter((candidate) => candidate.gap <= 180)
-      .sort((a, b) => a.gap - b.gap)[0]?.vehicle;
-  }
-  const tripId = prediction[3] != null ? prediction[3] : vehicle?.trip;
-  return tripId == null ? null : { leg, prediction, vehicle, tripId };
+  const tripId = prediction[3] != null ? prediction[3] : vehicle?.trip ?? null;
+  return { leg, prediction, vehicle, tripId };
 }
 
 function findTripPrediction(stopId, tripId, route, expectedEpoch) {
@@ -560,6 +564,8 @@ function startBusTracking(tripId) {
   S.tracking = {
     tripId: next.tripId,
     route: next.prediction[0],
+    boardStop: next.leg.board,
+    boardEpoch: next.prediction[2],
     destinationStop: next.leg.alight,
     destinationName: trip.to,
     tripName: trip.name,
@@ -623,7 +629,20 @@ function renderTrackedBusSheet(vehicle, destinationPrediction) {
 function updateBusTracking() {
   const tracked = S.tracking;
   if (!tracked || !S.live) return;
-  const vehicle = (S.live.vehicles || []).find((v) => String(v.trip) === String(tracked.tripId));
+  const boardingPrediction = ((S.live.stops || {})[String(tracked.boardStop)] || [])
+    .filter((p) => p[0] === tracked.route)
+    .map((p) => ({ prediction: p, gap: Math.abs(p[2] - tracked.boardEpoch) }))
+    .sort((a, b) => a.gap - b.gap)[0]?.prediction;
+  if (boardingPrediction) {
+    tracked.boardEpoch = boardingPrediction[2];
+    if (tracked.tripId == null && boardingPrediction[3] != null) {
+      tracked.tripId = boardingPrediction[3];
+    }
+  }
+  let vehicle = findVehicleForPrediction(
+    tracked.route, tracked.boardStop, tracked.boardEpoch, tracked.tripId
+  );
+  if (vehicle && tracked.tripId == null) tracked.tripId = vehicle.trip;
   const destinationPrediction = findTripPrediction(
     tracked.destinationStop, tracked.tripId, tracked.route, tracked.expectedArrival
   );
@@ -640,9 +659,8 @@ function updateBusTracking() {
   }
   if (!vehicle) {
     sheet(
-      '<h3><span class="mode bus">Bus</span> Finding bus ' + esc(tracked.route) + "</h3>" +
-      '<div class="sub">This is the next scheduled bus for ' + esc(tracked.tripName) +
-      ". Its live location will appear here as soon as MCTS reports it.</div>",
+      '<h3><span class="mode bus">Bus</span> Locating bus ' + esc(tracked.route) + "</h3>" +
+      '<div class="sub">MCTS has reported this arrival. Pairing it with the correct live map position now.</div>',
       "tracking"
     );
     return;
@@ -673,7 +691,7 @@ function renderHotRoutes() {
       <div class="trip-steps">${r.legs.map((l) => l.kind === "walk"
         ? `<span class="walk-step">${esc(l.text)}</span>`
         : `<span><strong>${esc(l.text)}</strong></span>`).join("")}</div>
-      <div class="trip-actions"><button class="textbtn" data-trip-map="${esc(r.id)}">See route</button><button class="textbtn" data-trip-track="${esc(r.id)}" ${nextBus ? "" : "disabled"}>${nextBus ? "Show me this bus" : "Bus not live yet"}</button><button class="textbtn" data-trip-alert="${esc(r.id)}">Alert me</button></div>
+      <div class="trip-actions"><button class="textbtn" data-trip-map="${esc(r.id)}">See route</button><button class="textbtn" data-trip-track="${esc(r.id)}" ${nextBus ? "" : "disabled"}>${nextBus ? "Show me this bus" : "No bus listed"}</button><button class="textbtn" data-trip-alert="${esc(r.id)}">Alert me</button></div>
     </article>`;
   }).join("");
   el.querySelectorAll("[data-trip-map]").forEach((b) => b.addEventListener("click", () => openTripOnMap(b.dataset.tripMap)));
