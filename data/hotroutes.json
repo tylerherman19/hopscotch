@@ -1,0 +1,10 @@
+{"note":"Hot routes are config. Stops are MCTS stop ids; Hop stops use their TransLoc ids.","routes":[
+{"id":"helen-law","name":"Helen's house to Marquette Law","from":"740 N Plankinton","to":"Eckstein Hall","legs":[
+ {"kind":"walk","text":"Walk 2 min to Wisconsin & Plankinton"},
+ {"kind":"bus","routes":["14","30"],"board":"5","alight":"9642","text":"Ride the 14 or 30 west, whichever comes first, to the N12 BRT station"},
+ {"kind":"walk","text":"Walk 3 min to Eckstein Hall"}]},
+{"id":"helen-lake","name":"Helen's house to the lake","from":"740 N Plankinton","to":"the lakefront","legs":[
+ {"kind":"walk","text":"Walk 2 min to Wisconsin & Plankinton"},
+ {"kind":"bus","routes":["14"],"board":"63","alight":"4391","text":"Ride the 14 east to Prospect & Mason"},
+ {"kind":"walk","text":"Walk 6 min to the water at the Art Museum"}]}
+]}
