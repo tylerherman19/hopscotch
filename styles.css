@@ -46,6 +46,7 @@ body {
   font: inherit; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.06em;
   text-transform: uppercase; padding: 9px 2px 7px; color: var(--muted); cursor: pointer;
 }
+.navbtn > span:first-child { display: none; }
 .navbtn.active { color: var(--ink); border-bottom-color: var(--accent); background: #edf5e9; }
 .badge {
   display: inline-block; min-width: 16px; padding: 0 4px; border-radius: 8px;
@@ -235,4 +236,81 @@ footer p { color: var(--muted); font-size: 0.72rem; }
   main { max-width: none; }
   #hotroutes { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 1040px; }
   .today-head, .summary-intro, .alert-setup { padding-left: max(28px, calc((100% - 980px) / 2)); }
+}
+
+/* Phone is the primary way someone checks a bus while walking out the door. */
+@media (max-width: 600px) {
+  body { min-height: 100dvh; }
+  #topbar { min-height: 50px; padding: 9px 12px 7px; align-items: center; }
+  .wordmark { font-size: .96rem; letter-spacing: .15em; }
+  .tagline { display: none; }
+  .statusline { max-width: 48%; font-size: .7rem; padding: 3px 6px; }
+
+  #navstrip {
+    position: fixed; inset: auto 0 0; z-index: 1000; height: calc(62px + env(safe-area-inset-bottom));
+    padding: 3px 3px env(safe-area-inset-bottom); border-top: 1px solid var(--rule); border-bottom: 0;
+    box-shadow: 0 -5px 16px rgba(20, 37, 31, .11); justify-content: space-around;
+  }
+  .navbtn {
+    min-width: 0; min-height: 54px; padding: 4px 1px 3px; border-bottom: 0; border-top: 3px solid transparent;
+    display: grid; place-items: center; align-content: center; gap: 1px; font-size: .63rem; line-height: 1.1;
+    letter-spacing: .02em; text-transform: none;
+  }
+  .navbtn > span:first-child { display: block; font-size: 1.18rem; line-height: 1; font-family: var(--mono); font-weight: 700; }
+  .navbtn.active { border-bottom: 0; border-top-color: var(--accent); background: #edf5e9; }
+  .badge { position: absolute; top: 3px; margin-left: 24px; min-width: 14px; font-size: .6rem; line-height: 14px; }
+
+  main { padding-bottom: calc(62px + env(safe-area-inset-bottom)); }
+  footer { padding: 10px 14px calc(75px + env(safe-area-inset-bottom)); }
+  #view-map { min-height: calc(100dvh - 112px); }
+  #mapcontrols { top: 8px; left: 8px; right: 8px; max-width: none; gap: 5px; }
+  .home-control { padding: 6px 8px; font-size: .7rem; }
+  #routepick { width: min(100%, 320px); min-height: 40px; font-size: .9rem; }
+  .toggles { width: 100%; max-width: 320px; justify-content: space-between; min-height: 36px; padding: 6px 8px; font-size: .74rem; gap: 3px; }
+  #livelabel { left: 8px; bottom: 8px; font-size: .68rem; }
+  #hopbanner { left: 8px; right: 8px; bottom: 39px; font-size: .74rem; }
+  .leaflet-bottom { margin-bottom: 2px; }
+  .leaflet-control-attribution { max-width: 72vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #sheet { max-height: 62%; padding: 15px 14px 19px; border-top-width: 3px; border-radius: 16px 16px 0 0; }
+  #sheet::before { content: ""; display: block; width: 34px; height: 4px; border-radius: 9px; background: var(--rule); margin: -7px auto 10px; }
+  #sheetclose { font-size: 1.5rem; min-width: 38px; min-height: 38px; }
+
+  .today-head, .summary-intro { padding: 18px 14px 12px; }
+  .today-head h1, .summary-intro h1, .alert-setup h1 { font-size: 1.7rem; }
+  .today-head p:last-child { font-size: .92rem; }
+  #hotroutes { gap: 10px; padding: 10px; }
+  .trip-card { padding: 13px; box-shadow: 2px 2px 0 #dce6dc; }
+  .trip-card h2 { font-size: 1.12rem; margin-top: 8px; }
+  .trip-top { align-items: center; }
+  .trip-live { font-size: .79rem; line-height: 1.55; }
+  .trip-live .delaychip { display: inline-block; margin-top: 2px; }
+  .trip-stops { margin: 10px 0 8px; font-size: .87rem; }
+  .trip-steps { font-size: .78rem; }
+  .trip-actions { padding-top: 11px; }
+  .textbtn { min-height: 32px; }
+  .alert-callout { margin: 2px 10px 16px; padding: 13px; align-items: flex-end; }
+  .alert-callout strong { font-size: .92rem; }.alert-callout p:last-child { font-size: .76rem; }
+  .secondary { min-height: 42px; }
+
+  .viewnote { padding: 10px 12px 6px; font-size: .8rem; }
+  .ledger { font-size: .8rem; table-layout: fixed; }
+  .ledger th, .ledger td { padding: 8px 5px; }
+  .ledger th:nth-child(1), .ledger td:nth-child(1) { width: 33px; }
+  #routetable th:nth-child(3), #routetable td:nth-child(3) { display: none; }
+  #routetable th:nth-child(2) { width: 66%; }
+  .ledger .num, .arr { font-size: .72rem; }
+  .routenum { min-width: 27px; padding: 2px 3px; font-size: .7rem; }
+  .ledger small { font-size: .64rem; }
+  .mode { font-size: .58rem; padding: 2px 4px; }
+  .pinbtn { min-width: 32px; min-height: 32px; }
+
+  .alert-setup { padding: 18px 14px; }
+  #alertform { gap: 12px; }
+  #alertform select, #alertform input { min-height: 46px; }
+  #alertform fieldset { padding: 11px; gap: 9px; }
+  #alertform fieldset label { display: flex; align-items: flex-start; gap: 8px; font-size: .86rem; }
+  #alertform input[type="checkbox"] { min-height: auto; margin-top: 3px; }
+  #alertform .btn { min-height: 48px; }
+  .alertrow { padding: 11px 13px; }.alertrow .text { font-size: .8rem; }
+  .reliability-grid { padding: 10px 12px; }.sumcard { margin: 8px 12px; }
 }

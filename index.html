@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75,500;75,700;100,400;100,600;100,800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=4">
+<link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
 
@@ -22,11 +22,11 @@
 </header>
 
 <nav id="navstrip">
-  <button class="navbtn active" data-view="plan">Today</button>
-  <button class="navbtn" data-view="map">Map</button>
-  <button class="navbtn" data-view="routes">Explore</button>
-  <button class="navbtn" data-view="alerts">Alerts <span id="alertbadge" class="badge" hidden></span></button>
-  <button class="navbtn" data-view="yesterday">Reliability</button>
+  <button class="navbtn active" data-view="plan"><span aria-hidden="true">●</span><span>Today</span></button>
+  <button class="navbtn" data-view="map"><span aria-hidden="true">⌖</span><span>Map</span></button>
+  <button class="navbtn" data-view="routes"><span aria-hidden="true">≡</span><span>Explore</span></button>
+  <button class="navbtn" data-view="alerts"><span aria-hidden="true">!</span><span>Alerts</span><span id="alertbadge" class="badge" hidden></span></button>
+  <button class="navbtn" data-view="yesterday"><span aria-hidden="true">↗</span><span>Reliability</span></button>
 </nav>
 
 <main>
@@ -111,6 +111,6 @@
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
