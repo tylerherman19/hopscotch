@@ -41,9 +41,7 @@
             <button class="mode-tab bus-tab" data-layer-mode="bus">Bus</button>
             <button class="mode-tab hop-tab" data-layer-mode="hop">Hop streetcar</button>
           </div>
-          <div class="map-quick" aria-label="Quick routes near Helen">
-            <button data-map-route="14">Bus 14</button><button data-map-route="30">Bus 30</button><button data-map-route="HOP:7">Hop M</button><button data-map-route="HOP:4">Hop L</button>
-          </div>
+          <div class="map-quick" id="mapquick" aria-label="Helen's regular trips"></div>
         </div>
         <div class="ctl-row">
           <select id="routepick" aria-label="Show a route from Helen's area">
@@ -56,7 +54,8 @@
           <label><input type="checkbox" id="tg-mine"> Starred routes only</label>
         </div>
       </div>
-      <div id="livelabel"><span id="livedot"></span><span id="liveage">connecting&hellip;</span></div>
+      <div id="livelabel"><span id="livedot"></span><span id="liveage">connecting live locations&hellip;</span></div>
+      <div id="refreshnote">Live vehicle locations. We check for an update every minute, or every 20 seconds while a route is open.</div>
       <div id="hopbanner" hidden>Hop live positions are down - showing schedule times only.</div>
     </div>
     <div id="sheet" hidden>

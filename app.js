@@ -60,7 +60,7 @@ async function boot() {
   initMap();
   buildRoutePicker();
   renderRouteTable();
-  wireNav(); wireToggles(); loadHotRoutes().then(() => { renderHotRoutes(); renderRouteTable(); wireAlerts(); });
+  wireNav(); wireToggles(); loadHotRoutes().then(() => { renderHotRoutes(); renderMapQuickRoutes(); renderRouteTable(); wireAlerts(); });
   refresh();
 }
 
@@ -81,8 +81,8 @@ function initMap() {
   $("sheetclose").onclick = () => clearSelection();
 }
 
-function vehIcon(color) {
-  return L.divIcon({ className: "", html: `<div class="veh-pin" style="width:12px;height:12px;border-radius:50%;background:${color}"></div>`, iconSize: [16, 16], iconAnchor: [8, 8] });
+function vehIcon(color, route) {
+  return L.divIcon({ className: "", html: `<div class="veh-pin" style="background:${color}">${esc(route)}</div>`, iconSize: [30, 22], iconAnchor: [15, 11] });
 }
 function hopIcon(color) {
   return L.divIcon({ className: "", html: `<div class="hop-pin" style="width:15px;height:15px;border-radius:4px;background:${color}">H</div>`, iconSize: [19, 19], iconAnchor: [9, 9] });
@@ -97,7 +97,7 @@ function renderVehicles() {
     if (!showBus) continue;
     if (only && v.route !== only) continue;
     if (mine && !S.pins.has(v.route)) continue;
-    const m = L.marker([v.lat, v.lon], { icon: vehIcon(delayColor(v.delay)), zIndexOffset: 100 })
+    const m = L.marker([v.lat, v.lon], { icon: vehIcon(delayColor(v.delay), v.route), zIndexOffset: 100 })
       .on("click", (e) => { L.DomEvent.stopPropagation(e); selectVehicle(v); });
     m.addTo(S.markers);
   }
@@ -333,11 +333,11 @@ function schedulePoll() {
 }
 function tickAge() {
   const dot = $("livedot"), lbl = $("liveage");
-  if (!S.live) { dot.className = ""; lbl.textContent = "connecting..."; return; }
+  if (!S.live) { dot.className = ""; lbl.textContent = "connecting live locations..."; return; }
   const age = Math.max(0, Math.floor(Date.now() / 1000 - S.live.ts));
   dot.className = age < 90 ? "fresh" : age < 300 ? "stale" : "dead";
   dot.id = "livedot";
-  lbl.textContent = age < 15 ? "live just now" : age < 90 ? `live ${age}s ago` : age < 3600 ? `last seen ${Math.floor(age / 60)} min ago` : "collector is down - showing last snapshot";
+  lbl.textContent = age < 15 ? "locations updated just now" : age < 90 ? `locations updated ${age}s ago` : age < 3600 ? `locations updated ${Math.floor(age / 60)} min ago` : "location feed is down — showing last confirmed positions";
 }
 
 /* ---------- alerts / ghosts ---------- */
@@ -408,11 +408,6 @@ function wireToggles() {
     document.querySelectorAll("[data-layer-mode]").forEach((b) => b.classList.toggle("active", b === button));
     renderVehicles();
   }));
-  document.querySelectorAll("[data-map-route]").forEach((button) => button.addEventListener("click", () => {
-    const rid = button.dataset.mapRoute;
-    $("routepick").value = rid;
-    $("routepick").dispatchEvent(new Event("change"));
-  }));
 }
 
 function routeDestination(r) {
@@ -451,13 +446,12 @@ function renderHotRoutes() {
   if (!S.hot.length) { el.innerHTML = '<div class="empty">No hot routes set up yet.</div>'; return; }
   el.innerHTML = S.hot.map((r) => {
     const transitLeg = r.legs.find((l) => l.kind !== "walk");
-    const live = transitLeg ? legLive(transitLeg) : "";
     const type = transitLeg?.kind === "hop" ? "hop" : "bus";
     const line = transitLeg?.kind === "hop" ? "Hop streetcar" : `Bus ${transitLeg?.routes?.join(" or ") || ""}`;
     return `<article class="trip-card ${type}" data-trip="${esc(r.id)}">
-      <div class="trip-top"><span class="mode ${type}">${type === "hop" ? "Hop" : "Bus"}</span><span class="trip-live">${live}</span></div>
+      <div class="trip-top"><span class="mode ${type}">${type === "hop" ? "Hop" : "Bus"}</span><span class="trip-route">${esc(line)} · ${esc(r.route_note || "")}</span></div>
       <h2>${esc(r.name)}</h2>
-      <p class="trip-route">${esc(line)} <span>${esc(r.route_note || "")}</span></p>
+      ${tripNextSummary(r, transitLeg)}
       <p class="trip-stops">${esc(r.from)} <b>→</b> ${esc(r.to)}</p>
       <div class="trip-steps">${r.legs.map((l) => l.kind === "walk"
         ? `<span class="walk-step">${esc(l.text)}</span>`
@@ -467,6 +461,32 @@ function renderHotRoutes() {
   }).join("");
   el.querySelectorAll("[data-trip-map]").forEach((b) => b.addEventListener("click", () => openTripOnMap(b.dataset.tripMap)));
   el.querySelectorAll("[data-trip-alert]").forEach((b) => b.addEventListener("click", () => openTripAlerts(b.dataset.tripAlert)));
+}
+
+function tripNextSummary(trip, leg) {
+  if (!S.live || !leg) return '<div class="next-summary"><span>Finding the next vehicle here…</span></div>';
+  let prediction, routeLabel, departureEpoch;
+  if (leg.kind === "bus") {
+    const preds = ((S.live.stops || {})[leg.board] || []).filter((p) => leg.routes.includes(p[0])).sort((a, b) => a[2] - b[2]);
+    prediction = preds[0];
+    routeLabel = prediction ? `Bus ${prediction[0]}` : "Bus";
+    departureEpoch = prediction?.[2];
+  } else {
+    const preds = (S.live.hop_stops || {})[String(leg.board)] || [];
+    prediction = preds[0]; routeLabel = "Hop streetcar"; departureEpoch = prediction?.[1];
+  }
+  if (!prediction || !departureEpoch) return `<div class="next-summary"><span class="next-label">Next ${esc(routeLabel)} to ${esc(trip.to)}</span><strong>No live departure is listed yet</strong><small>Check the route map for live vehicle locations.</small></div>`;
+  const inSecs = leg.kind === "bus" ? prediction[1] : prediction[0];
+  const arrivalEpoch = departureEpoch + (trip.travel_min || 20) * 60;
+  const delay = leg.kind === "bus" ? Math.max(0, ...(S.live.vehicles || []).filter((v) => leg.routes.includes(v.route) && v.delay != null).map((v) => v.delay)) : null;
+  return `<div class="next-summary"><span class="next-label">Next ${esc(routeLabel)} to ${esc(trip.to)}</span><strong><span class="next-minutes">${esc(fmtMin(inSecs))}</span> <span>until it is here</span></strong><small>Departs ${esc(fmtClock(departureEpoch))} · gets you to ${esc(trip.to)} about ${esc(fmtClock(arrivalEpoch))}${leg.kind === "hop" ? " · estimate" : ""}</small>${delay >= 240 ? `<span class="delaychip ${delayClass(delay)}">${delayText(delay)}</span>` : ""}</div>`;
+}
+
+function renderMapQuickRoutes() {
+  const el = $("mapquick");
+  if (!el || !S.hot) return;
+  el.innerHTML = S.hot.map((trip) => `<button data-trip-map="${esc(trip.id)}">${esc(trip.name)}</button>`).join("");
+  el.querySelectorAll("[data-trip-map]").forEach((button) => button.addEventListener("click", () => openTripOnMap(button.dataset.tripMap)));
 }
 
 function openTripOnMap(tripId) {
