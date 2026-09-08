@@ -383,7 +383,9 @@ async function renderSummary() {
     ["Snapshots kept", s.snapshots],
   ];
   const hotStats = (s.reliability || []).filter((r) => ["14", "30"].includes(r.route));
-  const reliability = hotStats.length ? `<div class="reliability-grid">${hotStats.map((r) => `<div><strong>${esc(r.route)}</strong><span>${esc(r.on_time_pct)}% on time</span><small>${esc(r.samples)} checks</small></div>`).join("")}</div>` : '<p class="viewnote">Reliability needs a full day of collected checks. Check back tomorrow for the percentage that matters.</p>';
+  const reliability = hotStats.length && (s.snapshots || 0) >= 24
+    ? `<div class="reliability-grid">${hotStats.map((r) => `<div><strong>${esc(r.route)}</strong><span>${esc(r.on_time_pct)}% on time</span><small>${esc(r.samples)} checks</small></div>`).join("")}</div>`
+    : `<p class="viewnote">We have ${esc(s.snapshots || 0)} archived check${s.snapshots === 1 ? "" : "s"} so far—enough to confirm the collector works, not enough to call a route reliable. The percentage appears after 24 checks.</p>`;
   el.innerHTML = `<div class="summary-intro"><p class="eyebrow">Not just where it is now</p><h1>How did your routes actually do?</h1><p>“On time” means the live feed was under 3 minutes late when we checked it.</p></div>${reliability}<div class="sumcard"><div class="row" style="font-weight:700"><span>Yesterday across MCTS</span><span></span></div>` +
     rows.map(([l, v]) => `<div class="row"><span class="lbl">${esc(l)}</span><span class="val">${esc(v)}</span></div>`).join("") + "</div>";
 }
