@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75,500;75,700;100,400;100,600;100,800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=7">
+<link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
 
@@ -37,15 +37,15 @@
         <div class="map-panel">
           <div class="home-control"><strong>Near Helen</strong><span>Wisconsin &amp; Plankinton</span></div>
           <div class="mode-tabs" role="group" aria-label="Choose transit to show">
-            <button class="mode-tab active" data-layer-mode="both">All transit</button>
-            <button class="mode-tab bus-tab" data-layer-mode="bus">Bus</button>
-            <button class="mode-tab hop-tab" data-layer-mode="hop">Hop streetcar</button>
+            <button class="mode-tab active" data-layer-mode="all">All live</button>
+            <button class="mode-tab bus-tab" data-layer-mode="bus">Buses</button>
+            <button class="mode-tab hop-tab" data-layer-mode="hop">The Hop</button>
           </div>
           <div class="map-quick" id="mapquick" aria-label="Helen's regular trips"></div>
         </div>
         <div class="ctl-row">
           <select id="routepick" aria-label="Show a route from Helen's area">
-            <option value="">Show a route&hellip;</option>
+            <option value="">Choose one route&hellip;</option>
           </select>
         </div>
         <div class="ctl-row toggles">
@@ -127,6 +127,6 @@
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>
