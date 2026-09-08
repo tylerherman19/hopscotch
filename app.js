@@ -11,7 +11,7 @@ const S = {
   routes: [], routeById: {}, shapes: {}, stops: {}, stopRoutes: {}, calendar: {}, hop: null,
   live: null, summary: undefined,
   selectedRoute: "", selectedVehicle: null,
-  tracking: null,
+  tracking: null, mapMode: "all",
   pins: new Set(JSON.parse(localStorage.getItem("hop_pins") || "[]")),
   pollTimer: null, lastPoll: 0,
   planCache: {}, hot: null,
@@ -124,7 +124,7 @@ function drawShape(routeId) {
     L.polyline(line, { color: "#fff", weight: 7, opacity: 0.9 }).addTo(S.shapeLayer);
     L.polyline(line, { color, weight: 4 }).addTo(S.shapeLayer);
     for (const st of S.hop.stops.filter((s) => String(s.route) === rid)) {
-      L.marker([st.lat, st.lon], { icon: L.divIcon({ className: "", html: '<div class="stop-dot" style="width:9px;height:9px;border-radius:50%"></div>', iconSize: [12, 12], iconAnchor: [6, 6] }) })
+      L.marker([st.lat, st.lon], { icon: L.divIcon({ className: "", html: '<div class="hop-stop-dot"></div>', iconSize: [12, 12], iconAnchor: [6, 6] }) })
         .on("click", (e) => { L.DomEvent.stopPropagation(e); selectHopStop(st); })
         .addTo(S.stopLayer);
     }
@@ -153,6 +153,33 @@ function drawShape(routeId) {
   if (bounds.length) S.map.fitBounds(L.latLngBounds(bounds.map((p) => p)), { padding: [40, 40] });
 }
 
+function drawHopNetwork() {
+  S.shapeLayer.clearLayers();
+  S.stopLayer.clearLayers();
+  let bounds = [];
+  for (const route of S.hop.routes || []) {
+    const line = S.hop.lines[String(route.id)] || [];
+    if (!line.length) continue;
+    const color = "#" + (route.color || "3A81DE");
+    L.polyline(line, { color: "#fff", weight: 8, opacity: .92 }).addTo(S.shapeLayer);
+    L.polyline(line, { color, weight: 5, opacity: .9 }).addTo(S.shapeLayer);
+    bounds = bounds.concat(line);
+  }
+  const seen = new Set();
+  for (const st of S.hop.stops || []) {
+    const key = String(st.id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    L.marker([st.lat, st.lon], {
+      icon: L.divIcon({ className: "", html: '<div class="hop-stop-dot"></div>', iconSize: [12, 12], iconAnchor: [6, 6] })
+    }).on("click", (e) => {
+      L.DomEvent.stopPropagation(e);
+      selectHopStop(st);
+    }).addTo(S.stopLayer);
+  }
+  if (bounds.length) S.map.fitBounds(L.latLngBounds(bounds.map((p) => p)), { padding: [35, 35] });
+}
+
 /* ---------- selection / sheet ---------- */
 function sheet(html, mode = "") {
   $("sheetbody").innerHTML = html;
@@ -170,11 +197,13 @@ function clearSelection() {
   setTrackingChrome(false);
   $("routepick").value = "";
   S.shapeLayer.clearLayers(); S.stopLayer.clearLayers();
+  if (S.mapMode === "hop") drawHopNetwork();
   $("sheet").hidden = true;
   renderVehicles(); schedulePoll();
 }
 
 function selectVehicle(v) {
+  syncLayerMode("bus");
   S.selectedVehicle = v; S.selectedRoute = v.route;
   $("routepick").value = v.route;
   drawShape(v.route); renderVehicles();
@@ -191,6 +220,7 @@ function selectVehicle(v) {
 }
 
 function selectHop(h) {
+  syncLayerMode("hop");
   S.selectedRoute = "HOP:" + h.route;
   drawShape("HOP:" + h.route); renderVehicles();
   const line = S.hop.routes.find((r) => r.id === h.route) || { name: "Hop" };
@@ -266,6 +296,7 @@ function buildRoutePicker() {
     if (!v) return clearSelection();
     S.tracking = null;
     setTrackingChrome(false);
+    syncLayerMode(v.startsWith("HOP:") ? "hop" : "bus");
     S.selectedRoute = v; S.selectedVehicle = null;
     drawShape(v); renderVehicles(); schedulePoll();
     if (v.startsWith("HOP:")) {
@@ -314,6 +345,7 @@ function renderRouteTable() {
     const rid = tr.dataset.route;
     S.tracking = null;
     setTrackingChrome(false);
+    syncLayerMode("bus");
     switchView("map");
     $("routepick").value = rid;
     S.selectedRoute = rid; S.selectedVehicle = null;
@@ -416,15 +448,35 @@ function switchView(name) {
 function wireNav() {
   document.querySelectorAll(".navbtn").forEach((b) => b.addEventListener("click", () => switchView(b.dataset.view)));
 }
+function syncLayerMode(mode) {
+  S.mapMode = mode;
+  $("tg-bus").checked = mode !== "hop";
+  $("tg-hop").checked = mode !== "bus";
+  document.querySelectorAll("[data-layer-mode]").forEach(
+    (button) => button.classList.toggle("active", button.dataset.layerMode === mode)
+  );
+}
+
+function setLayerMode(mode) {
+  S.tracking = null;
+  S.selectedVehicle = null;
+  S.selectedRoute = "";
+  setTrackingChrome(false);
+  syncLayerMode(mode);
+  $("routepick").value = "";
+  $("sheet").hidden = true;
+  S.shapeLayer.clearLayers();
+  S.stopLayer.clearLayers();
+  if (mode === "hop") drawHopNetwork();
+  renderVehicles();
+  schedulePoll();
+}
+
 function wireToggles() {
-  for (const id of ["tg-bus", "tg-hop", "tg-mine"]) $(id).addEventListener("change", renderVehicles);
-  document.querySelectorAll("[data-layer-mode]").forEach((button) => button.addEventListener("click", () => {
-    const mode = button.dataset.layerMode;
-    $("tg-bus").checked = mode !== "hop";
-    $("tg-hop").checked = mode !== "bus";
-    document.querySelectorAll("[data-layer-mode]").forEach((b) => b.classList.toggle("active", b === button));
-    renderVehicles();
-  }));
+  $("tg-mine").addEventListener("change", renderVehicles);
+  document.querySelectorAll("[data-layer-mode]").forEach(
+    (button) => button.addEventListener("click", () => setLayerMode(button.dataset.layerMode))
+  );
 }
 
 function routeDestination(r) {
@@ -517,6 +569,7 @@ function startBusTracking(tripId) {
   };
   S.selectedRoute = next.prediction[0];
   S.selectedVehicle = null;
+  syncLayerMode("bus");
   setTrackingChrome(true);
   switchView("map");
   $("routepick").value = S.selectedRoute;
@@ -536,6 +589,7 @@ function stopBusTracking(arrived) {
   S.tracking = null;
   S.selectedVehicle = null;
   S.selectedRoute = "";
+  syncLayerMode("bus");
   setTrackingChrome(false);
   $("routepick").value = "";
   S.shapeLayer.clearLayers();
@@ -659,6 +713,7 @@ function openTripOnMap(tripId) {
   const trip = S.hot?.find((r) => r.id === tripId);
   const leg = trip?.legs.find((l) => l.kind !== "walk");
   if (!leg) return;
+  syncLayerMode(leg.kind === "hop" ? "hop" : "bus");
   switchView("map");
   const rid = leg.kind === "hop" ? "HOP:" + leg.route : leg.routes[0];
   $("routepick").value = rid; S.selectedRoute = rid; drawShape(rid); renderVehicles();
