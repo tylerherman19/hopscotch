@@ -473,24 +473,35 @@ function nextBusForTrip(trip) {
   return tripId == null ? null : { leg, prediction, vehicle, tripId };
 }
 
-function findTripPrediction(stopId, tripId) {
-  return ((S.live?.stops || {})[String(stopId)] || []).find(
+function findTripPrediction(stopId, tripId, route, expectedEpoch) {
+  const predictions = (S.live?.stops || {})[String(stopId)] || [];
+  const exact = predictions.find(
     (p) => p[3] != null && String(p[3]) === String(tripId)
-  ) || null;
+  );
+  if (exact) return exact;
+  if (!route || !expectedEpoch) return null;
+  const closest = predictions
+    .filter((p) => p[0] === route)
+    .map((p) => ({ prediction: p, gap: Math.abs(p[2] - expectedEpoch) }))
+    .sort((a, b) => a.gap - b.gap)[0];
+  return closest && closest.gap <= 600 ? closest.prediction : null;
 }
 
 function startBusTracking(tripId) {
   const trip = S.hot?.find((r) => r.id === tripId);
   const next = nextBusForTrip(trip);
   if (!trip || !next) return;
-  const destinationPrediction = findTripPrediction(next.leg.alight, next.tripId);
+  const fallbackArrival = next.prediction[2] + (trip.travel_min || 20) * 60;
+  const destinationPrediction = findTripPrediction(
+    next.leg.alight, next.tripId, next.prediction[0], fallbackArrival
+  );
   S.tracking = {
     tripId: next.tripId,
     route: next.prediction[0],
     destinationStop: next.leg.alight,
     destinationName: trip.to,
     tripName: trip.name,
-    expectedArrival: destinationPrediction?.[2] || next.prediction[2] + (trip.travel_min || 20) * 60,
+    expectedArrival: destinationPrediction?.[2] || fallbackArrival,
     sawDestination: !!destinationPrediction,
     focused: false,
   };
@@ -546,7 +557,9 @@ function updateBusTracking() {
   const tracked = S.tracking;
   if (!tracked || !S.live) return;
   const vehicle = (S.live.vehicles || []).find((v) => String(v.trip) === String(tracked.tripId));
-  const destinationPrediction = findTripPrediction(tracked.destinationStop, tracked.tripId);
+  const destinationPrediction = findTripPrediction(
+    tracked.destinationStop, tracked.tripId, tracked.route, tracked.expectedArrival
+  );
   if (destinationPrediction) {
     tracked.expectedArrival = destinationPrediction[2];
     tracked.sawDestination = true;
