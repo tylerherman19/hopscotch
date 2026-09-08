@@ -118,6 +118,24 @@ main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 }
 #sheetbody h3 { font-size: 1rem; font-weight: 700; margin-bottom: 2px; }
 #sheetbody .sub { color: var(--muted); font-size: 0.8rem; margin-bottom: 8px; }
+#mapcontrols[hidden], #mapkey[hidden], #refreshnote[hidden] { display: none; }
+.tracking-summary { margin-top: 10px; border: 1px solid var(--rule); background: #fff; }
+.tracking-destination {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 10px;
+  padding: 9px 10px; border-bottom: 1px solid var(--rule);
+}
+.tracking-destination span { color: var(--muted); font-size: .76rem; font-weight: 700; }
+.tracking-destination strong { color: var(--accent); font-family: var(--mono); font-size: 1.05rem; white-space: nowrap; }
+.tracking-next {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 10px;
+  padding: 9px 10px;
+}
+.tracking-next span { grid-column: 1 / -1; color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.tracking-next strong { min-width: 0; font-size: .9rem; line-height: 1.2; }
+.tracking-next em { color: var(--accent); font: 700 .8rem/1 var(--mono); white-space: nowrap; }
+.tracking-footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 9px; }
+.tracking-footer > span { color: var(--muted); font-size: .7rem; }
+.tracking-footer .btn { flex: 0 0 auto; padding: 8px 10px; font-size: .72rem; letter-spacing: .02em; }
 .delaychip { white-space: nowrap; font-family: var(--mono); font-size: 0.75rem; padding: 2px 7px; border: 1px solid; }
 .delaychip.good { color: var(--good); border-color: var(--good); }
 .delaychip.warn { color: var(--warn); border-color: var(--warn); }
@@ -296,6 +314,7 @@ footer p { color: var(--muted); font-size: 0.72rem; }
   .leaflet-bottom { margin-bottom: 2px; }
   .leaflet-control-attribution { max-width: 72vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #sheet { max-height: 62%; padding: 15px 14px 19px; border-top-width: 3px; border-radius: 16px 16px 0 0; }
+  #sheet.tracking-sheet { max-height: none; overflow-y: visible; padding-bottom: 14px; }
   #sheet::before { content: ""; display: block; width: 34px; height: 4px; border-radius: 9px; background: var(--rule); margin: -7px auto 10px; }
   #sheetclose { font-size: 1.5rem; min-width: 38px; min-height: 38px; }
 
@@ -320,7 +339,7 @@ footer p { color: var(--muted); font-size: 0.72rem; }
   .viewnote { padding: 10px 12px 6px; font-size: .8rem; }
   .ledger { font-size: .8rem; table-layout: fixed; }
   .ledger th, .ledger td { padding: 8px 5px; }
-  .ledger th:nth-child(1), .ledger td:nth-child(1) { width: 33px; }
+  #routetable th:nth-child(1), #routetable td:nth-child(1) { width: 33px; }
   #routetable th:nth-child(3), #routetable td:nth-child(3) { display: none; }
   #routetable th:nth-child(2) { width: 66%; }
   .ledger .num, .arr { font-size: .72rem; }
