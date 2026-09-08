@@ -68,9 +68,9 @@ async function boot() {
 function initMap() {
   S.map = L.map("map", { zoomControl: false, attributionControl: true }).setView(DOWNTOWN, 14);
   L.control.zoom({ position: "bottomright" }).addTo(S.map);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a> | transit data MCTS / the Hop',
-    maxZoom: 19,
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+    attribution: 'Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | transit data MCTS / the Hop',
+    maxZoom: 16,
   }).addTo(S.map);
   S.markers = L.layerGroup().addTo(S.map);
   S.shapeLayer = L.layerGroup().addTo(S.map);
