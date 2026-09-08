@@ -11,6 +11,7 @@ const S = {
   routes: [], routeById: {}, shapes: {}, stops: {}, stopRoutes: {}, calendar: {}, hop: null,
   live: null, summary: undefined,
   selectedRoute: "", selectedVehicle: null,
+  tracking: null,
   pins: new Set(JSON.parse(localStorage.getItem("hop_pins") || "[]")),
   pollTimer: null, lastPoll: 0,
   planCache: {}, hot: null,
@@ -95,6 +96,7 @@ function renderVehicles() {
   const only = S.selectedRoute;
   for (const v of S.live.vehicles) {
     if (!showBus) continue;
+    if (S.tracking && String(v.trip) !== String(S.tracking.tripId)) continue;
     if (only && v.route !== only) continue;
     if (mine && !S.pins.has(v.route)) continue;
     const m = L.marker([v.lat, v.lon], { icon: vehIcon(delayColor(v.delay), v.route), zIndexOffset: 100 })
@@ -102,6 +104,7 @@ function renderVehicles() {
     m.addTo(S.markers);
   }
   for (const h of S.live.hop) {
+    if (S.tracking) continue;
     if (!showHop) continue;
     if (only && only !== "HOP:" + h.route) continue;
     if (mine && !S.pins.has("HOP:" + h.route)) continue;
@@ -156,7 +159,7 @@ function sheet(html) {
   $("sheet").hidden = false;
 }
 function clearSelection() {
-  S.selectedVehicle = null; S.selectedRoute = "";
+  S.selectedVehicle = null; S.selectedRoute = ""; S.tracking = null;
   $("routepick").value = "";
   S.shapeLayer.clearLayers(); S.stopLayer.clearLayers();
   $("sheet").hidden = true;
@@ -253,6 +256,7 @@ function buildRoutePicker() {
   sel.onchange = () => {
     const v = sel.value;
     if (!v) return clearSelection();
+    S.tracking = null;
     S.selectedRoute = v; S.selectedVehicle = null;
     drawShape(v); renderVehicles(); schedulePoll();
     if (v.startsWith("HOP:")) {
@@ -299,6 +303,7 @@ function renderRouteTable() {
   tb.querySelectorAll("tr").forEach((tr) => tr.addEventListener("click", (ev) => {
     if (ev.target.dataset.pin) return;
     const rid = tr.dataset.route;
+    S.tracking = null;
     switchView("map");
     $("routepick").value = rid;
     S.selectedRoute = rid; S.selectedVehicle = null;
@@ -315,7 +320,7 @@ async function refresh() {
     S.live = live; S.lastPoll = Date.now();
     $("statusline").textContent = live.status || "All quiet";
     $("hopbanner").hidden = !live.hop_offline;
-    renderVehicles(); renderRouteTable(); renderAlerts(); renderGhosts(); renderHotRoutes();
+    updateBusTracking(); renderVehicles(); renderRouteTable(); renderAlerts(); renderGhosts(); renderHotRoutes();
     const nb = (live.alerts?.length || 0) + (live.ghosts?.length || 0);
     $("alertbadge").hidden = nb === 0; $("alertbadge").textContent = nb;
   } catch (e) {
@@ -326,7 +331,7 @@ async function refresh() {
 function schedulePoll() {
   clearTimeout(S.pollTimer);
   const poking = !!(S.selectedRoute || S.selectedVehicle || !$("sheet").hidden);
-  S.pollTimer = setTimeout(refresh, poking ? 20000 : 60000);
+  S.pollTimer = setTimeout(refresh, S.tracking ? 15000 : poking ? 20000 : 60000);
   tickAge();
   clearInterval(S.ageTimer);
   S.ageTimer = setInterval(tickAge, 5000);
@@ -441,6 +446,134 @@ function legLive(leg) {
   }
   return "";
 }
+
+function nextBusForTrip(trip) {
+  const leg = trip?.legs.find((l) => l.kind === "bus");
+  if (!leg || !S.live) return null;
+  const predictions = ((S.live.stops || {})[String(leg.board)] || [])
+    .filter((p) => leg.routes.includes(p[0]))
+    .sort((a, b) => a[2] - b[2]);
+  const prediction = predictions[0];
+  if (!prediction) return null;
+
+  let vehicle = (S.live.vehicles || []).find((v) =>
+    prediction[3] != null && String(v.trip) === String(prediction[3])
+  );
+  if (!vehicle) {
+    vehicle = (S.live.vehicles || [])
+      .filter((v) => v.route === prediction[0])
+      .map((v) => {
+        const atStop = (v.next || []).find((n) => String(n.stop) === String(leg.board));
+        return { vehicle: v, gap: atStop ? Math.abs(atStop.at - prediction[2]) : Infinity };
+      })
+      .filter((candidate) => candidate.gap <= 180)
+      .sort((a, b) => a.gap - b.gap)[0]?.vehicle;
+  }
+  const tripId = prediction[3] != null ? prediction[3] : vehicle?.trip;
+  return tripId == null ? null : { leg, prediction, vehicle, tripId };
+}
+
+function findTripPrediction(stopId, tripId) {
+  return ((S.live?.stops || {})[String(stopId)] || []).find(
+    (p) => p[3] != null && String(p[3]) === String(tripId)
+  ) || null;
+}
+
+function startBusTracking(tripId) {
+  const trip = S.hot?.find((r) => r.id === tripId);
+  const next = nextBusForTrip(trip);
+  if (!trip || !next) return;
+  const destinationPrediction = findTripPrediction(next.leg.alight, next.tripId);
+  S.tracking = {
+    tripId: next.tripId,
+    route: next.prediction[0],
+    destinationStop: next.leg.alight,
+    destinationName: trip.to,
+    tripName: trip.name,
+    expectedArrival: destinationPrediction?.[2] || next.prediction[2] + (trip.travel_min || 20) * 60,
+    sawDestination: !!destinationPrediction,
+    focused: false,
+  };
+  S.selectedRoute = next.prediction[0];
+  S.selectedVehicle = null;
+  switchView("map");
+  $("routepick").value = S.selectedRoute;
+  drawShape(S.selectedRoute);
+  renderVehicles();
+  updateBusTracking();
+  schedulePoll();
+}
+
+function stopBusTracking(arrived) {
+  const tracked = S.tracking;
+  if (!tracked) return;
+  if (!arrived) {
+    clearSelection();
+    return;
+  }
+  S.tracking = null;
+  S.selectedVehicle = null;
+  S.selectedRoute = "";
+  $("routepick").value = "";
+  S.shapeLayer.clearLayers();
+  S.stopLayer.clearLayers();
+  renderVehicles();
+  sheet(
+    '<h3><span class="mode bus">Bus</span> Arrived</h3>' +
+    '<div class="sub">Bus ' + esc(tracked.route) + ' reached ' + esc(tracked.destinationName) + '. Showing all buses again.</div>'
+  );
+  schedulePoll();
+}
+
+function renderTrackedBusSheet(vehicle, destinationPrediction) {
+  const next = (vehicle.next || []).slice(0, 4).map((n) =>
+    "<tr><td>" + esc(n.name) + '</td><td class="arr">' + fmtMin(n.in) +
+    '</td><td class="arr">' + fmtClock(n.at) + "</td></tr>"
+  ).join("");
+  const arrival = destinationPrediction?.[2] || S.tracking.expectedArrival;
+  sheet(
+    '<h3><span class="mode bus">Bus</span> Tracking bus ' + esc(S.tracking.route) + "</h3>" +
+    '<div class="sub">Only this bus is on the map. Following it to ' + esc(S.tracking.destinationName) +
+    " at about " + esc(fmtClock(arrival)) + ".</div>" +
+    '<table class="ledger"><tbody>' + (next || '<tr><td>Waiting for its next stops...</td></tr>') + "</tbody></table>" +
+    '<div class="sub" style="margin-top:8px"><button class="btn" data-stop-tracking style="padding:7px 12px;font-size:0.8rem">Show all buses</button></div>'
+  );
+  const stopButton = document.querySelector("[data-stop-tracking]");
+  if (stopButton) stopButton.onclick = () => stopBusTracking(false);
+}
+
+function updateBusTracking() {
+  const tracked = S.tracking;
+  if (!tracked || !S.live) return;
+  const vehicle = (S.live.vehicles || []).find((v) => String(v.trip) === String(tracked.tripId));
+  const destinationPrediction = findTripPrediction(tracked.destinationStop, tracked.tripId);
+  if (destinationPrediction) {
+    tracked.expectedArrival = destinationPrediction[2];
+    tracked.sawDestination = true;
+  }
+  const now = Math.floor(Date.now() / 1000);
+  if ((destinationPrediction && destinationPrediction[1] <= 0) ||
+      (!destinationPrediction && tracked.sawDestination && now >= tracked.expectedArrival) ||
+      (!destinationPrediction && !vehicle && now >= tracked.expectedArrival + 120)) {
+    stopBusTracking(true);
+    return;
+  }
+  if (!vehicle) {
+    sheet(
+      '<h3><span class="mode bus">Bus</span> Finding bus ' + esc(tracked.route) + "</h3>" +
+      '<div class="sub">This is the next scheduled bus for ' + esc(tracked.tripName) +
+      ". Its live location will appear here as soon as MCTS reports it.</div>"
+    );
+    return;
+  }
+  const point = [vehicle.lat, vehicle.lon];
+  if (tracked.focused) S.map.panTo(point, { animate: true });
+  else S.map.setView(point, Math.max(15, S.map.getZoom()));
+  tracked.focused = true;
+  S.selectedVehicle = vehicle;
+  renderTrackedBusSheet(vehicle, destinationPrediction);
+}
+
 function renderHotRoutes() {
   const el = $("hotroutes");
   if (!el) return;
@@ -448,6 +581,7 @@ function renderHotRoutes() {
   if (!S.hot.length) { el.innerHTML = '<div class="empty">No hot routes set up yet.</div>'; return; }
   el.innerHTML = S.hot.map((r) => {
     const transitLeg = r.legs.find((l) => l.kind !== "walk");
+    const nextBus = nextBusForTrip(r);
     const type = transitLeg?.kind === "hop" ? "hop" : "bus";
     const line = transitLeg?.kind === "hop" ? "Hop streetcar" : `Bus ${transitLeg?.routes?.join(" or ") || ""}`;
     return `<article class="trip-card ${type}" data-trip="${esc(r.id)}">
@@ -458,10 +592,11 @@ function renderHotRoutes() {
       <div class="trip-steps">${r.legs.map((l) => l.kind === "walk"
         ? `<span class="walk-step">${esc(l.text)}</span>`
         : `<span><strong>${esc(l.text)}</strong></span>`).join("")}</div>
-      <div class="trip-actions"><button class="textbtn" data-trip-map="${esc(r.id)}">See on map</button><button class="textbtn" data-trip-alert="${esc(r.id)}">Alert me</button></div>
+      <div class="trip-actions"><button class="textbtn" data-trip-map="${esc(r.id)}">See route</button><button class="textbtn" data-trip-track="${esc(r.id)}" ${nextBus ? "" : "disabled"}>${nextBus ? "Show me this bus" : "Bus not live yet"}</button><button class="textbtn" data-trip-alert="${esc(r.id)}">Alert me</button></div>
     </article>`;
   }).join("");
   el.querySelectorAll("[data-trip-map]").forEach((b) => b.addEventListener("click", () => openTripOnMap(b.dataset.tripMap)));
+  el.querySelectorAll("[data-trip-track]").forEach((b) => b.addEventListener("click", () => startBusTracking(b.dataset.tripTrack)));
   el.querySelectorAll("[data-trip-alert]").forEach((b) => b.addEventListener("click", () => openTripAlerts(b.dataset.tripAlert)));
 }
 
@@ -492,6 +627,7 @@ function renderMapQuickRoutes() {
 }
 
 function openTripOnMap(tripId) {
+  S.tracking = null;
   const trip = S.hot?.find((r) => r.id === tripId);
   const leg = trip?.legs.find((l) => l.kind !== "walk");
   if (!leg) return;
