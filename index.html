@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hopscotch - MKE live transit</title>
+<meta name="description" content="Every Milwaukee bus and Hop streetcar live on one map, with arrival predictions.">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75,500;75,700;100,400;100,600;100,800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header id="topbar">
+  <div class="brand">
+    <span class="wordmark">HOPSCOTCH</span>
+    <span class="tagline">MKE live transit</span>
+  </div>
+  <div id="statusline" class="statusline" title="System status">&mdash;</div>
+</header>
+
+<nav id="navstrip">
+  <button class="navbtn active" data-view="map">Map</button>
+  <button class="navbtn" data-view="routes">Routes</button>
+  <button class="navbtn" data-view="plan">Plan</button>
+  <button class="navbtn" data-view="alerts">Alerts <span id="alertbadge" class="badge" hidden></span></button>
+  <button class="navbtn" data-view="yesterday">Yesterday</button>
+</nav>
+
+<main>
+  <section id="view-map" class="view active">
+    <div id="mapwrap">
+      <div id="map"></div>
+      <div id="mapcontrols">
+        <div class="ctl-row">
+          <select id="routepick" aria-label="Show a route">
+            <option value="">Show a route&hellip;</option>
+          </select>
+        </div>
+        <div class="ctl-row toggles">
+          <label><input type="checkbox" id="tg-bus" checked> Buses</label>
+          <label><input type="checkbox" id="tg-hop" checked> Hop</label>
+          <label><input type="checkbox" id="tg-mine"> My routes</label>
+        </div>
+      </div>
+      <div id="livelabel"><span id="livedot"></span><span id="liveage">connecting&hellip;</span></div>
+      <div id="hopbanner" hidden>Hop live positions are down - showing schedule times only.</div>
+    </div>
+    <div id="sheet" hidden>
+      <button id="sheetclose" aria-label="Close">&times;</button>
+      <div id="sheetbody"></div>
+    </div>
+  </section>
+
+  <section id="view-routes" class="view">
+    <p class="viewnote">Every MCTS route, what's running on it right now, and how late it is. Pin the ones you ride.</p>
+    <table class="ledger" id="routetable">
+      <thead><tr><th></th><th>Route</th><th>Out now</th><th>Worst delay</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="view-plan" class="view">
+    <p class="viewnote">A to B across bus and Hop. Times come from today's schedule plus live predictions.</p>
+    <div class="planform">
+      <label>From <input id="plan-from" type="text" placeholder="Address, place, or stop" autocomplete="off"></label>
+      <label>To <input id="plan-to" type="text" placeholder="Address, place, or stop" autocomplete="off"></label>
+      <button id="plan-go" class="btn">Plan my trip</button>
+    </div>
+    <div id="plan-out"></div>
+  </section>
+
+  <section id="view-alerts" class="view">
+    <p class="viewnote">Straight from the MCTS alert feed, in plain English.</p>
+    <div id="alertlist"></div>
+    <h2 class="secthead">Ghost buses today</h2>
+    <p class="viewnote">Trips the schedule promised that never showed up.</p>
+    <table class="ledger" id="ghosttable">
+      <thead><tr><th>Route</th><th>Was due</th><th>Toward</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="view-yesterday" class="view">
+    <p class="viewnote">The collector keeps every snapshot. This card is built from yesterday's.</p>
+    <div id="summary"></div>
+  </section>
+</main>
+
+<footer>
+  <p>Live positions from MCTS and the Hop's public map feed, collected every half minute or so. Hop arrival times are estimates. Not affiliated with MCTS or the Hop.</p>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
