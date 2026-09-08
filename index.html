@@ -24,7 +24,7 @@
 <nav id="navstrip">
   <button class="navbtn active" data-view="map">Map</button>
   <button class="navbtn" data-view="routes">Routes</button>
-  <button class="navbtn" data-view="plan">Plan</button>
+  <button class="navbtn" data-view="plan">Hot routes</button>
   <button class="navbtn" data-view="alerts">Alerts <span id="alertbadge" class="badge" hidden></span></button>
   <button class="navbtn" data-view="yesterday">Yesterday</button>
 </nav>
@@ -63,13 +63,8 @@
   </section>
 
   <section id="view-plan" class="view">
-    <p class="viewnote">A to B across bus and Hop. Times come from today's schedule plus live predictions.</p>
-    <div class="planform">
-      <label>From <input id="plan-from" type="text" placeholder="Address, place, or stop" autocomplete="off"></label>
-      <label>To <input id="plan-to" type="text" placeholder="Address, place, or stop" autocomplete="off"></label>
-      <button id="plan-go" class="btn">Plan my trip</button>
-    </div>
-    <div id="plan-out"></div>
+    <p class="viewnote">Your regular trips, watched live. Next bus, the one after, and whether either is late.</p>
+    <div id="hotroutes"></div>
   </section>
 
   <section id="view-alerts" class="view">
