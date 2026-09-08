@@ -346,12 +346,18 @@ def build_daily(day=None):
         pass
     trips = set()
     route_delay = {}
+    route_samples = {}
+    route_ontime = {}
     route_seen_ts = {}
     longest_gap = {}
     for r in rows:
         for v in r.get("v", []):
             trips.add(v.get("t"))
             rid = v.get("r")
+            if v.get("d") is not None and rid:
+                route_samples[rid] = route_samples.get(rid, 0) + 1
+                if v["d"] < 180:  # under three minutes late is useful, human-scale on time
+                    route_ontime[rid] = route_ontime.get(rid, 0) + 1
             if v.get("d"):
                 route_delay[rid] = max(route_delay.get(rid, 0), v["d"])
             if rid:
@@ -363,10 +369,15 @@ def build_daily(day=None):
                           key=lambda x: -x["min"])[:5]
     gaps = sorted(({"route": k, "min": round(v / 60)} for k, v in longest_gap.items()),
                   key=lambda x: -x["min"])[:5]
+    reliability = sorted(({
+        "route": rid,
+        "on_time_pct": round(100 * route_ontime.get(rid, 0) / samples),
+        "samples": samples,
+    } for rid, samples in route_samples.items()), key=lambda x: x["route"])
     summary = {"date": f"{day[0:4]}-{day[4:6]}-{day[6:8]}", "trips_run": len(trips),
                "worst_delays": worst_delays, "longest_gaps": gaps,
                "worst_routes": [w["route"] for w in worst_delays[:3]],
-               "snapshots": len(rows)}
+               "snapshots": len(rows), "reliability": reliability}
     save_json(f"{LIVE}/summary.json", summary)
     return summary
 
@@ -532,7 +543,8 @@ def loop(minutes):
             push_live()
             last_push = time.time()
         if now_ct().hour == 3 and now_ct().minute >= 55 and today_key() != last_daily_day:
-            try: build_daily()
+            # The date has rolled over; summarize the complete day we just finished.
+            try: build_daily((now_ct() - timedelta(days=1)).strftime("%Y%m%d"))
             except Exception as e: print(f"daily error: {e}", file=sys.stderr)
             last_daily_day = today_key()
         time.sleep(POLL_SECS)

@@ -9,33 +9,34 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75,500;75,700;100,400;100,600;100,800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=3">
+<link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 
 <header id="topbar">
   <div class="brand">
     <span class="wordmark">HOPSCOTCH</span>
-    <span class="tagline">MKE live transit</span>
+    <span class="tagline">Helen's transit, made useful</span>
   </div>
   <div id="statusline" class="statusline" title="System status">&mdash;</div>
 </header>
 
 <nav id="navstrip">
-  <button class="navbtn active" data-view="map">Map</button>
-  <button class="navbtn" data-view="routes">Routes</button>
-  <button class="navbtn" data-view="plan">Hot routes</button>
+  <button class="navbtn active" data-view="plan">Today</button>
+  <button class="navbtn" data-view="map">Map</button>
+  <button class="navbtn" data-view="routes">Explore</button>
   <button class="navbtn" data-view="alerts">Alerts <span id="alertbadge" class="badge" hidden></span></button>
-  <button class="navbtn" data-view="yesterday">Yesterday</button>
+  <button class="navbtn" data-view="yesterday">Reliability</button>
 </nav>
 
 <main>
-  <section id="view-map" class="view active">
+  <section id="view-map" class="view">
     <div id="mapwrap">
       <div id="map"></div>
       <div id="mapcontrols">
+        <div class="home-control"><strong>Near Helen</strong><span>Wisconsin &amp; Plankinton</span></div>
         <div class="ctl-row">
-          <select id="routepick" aria-label="Show a route">
+          <select id="routepick" aria-label="Show a route from Helen's area">
             <option value="">Show a route&hellip;</option>
           </select>
         </div>
@@ -55,20 +56,41 @@
   </section>
 
   <section id="view-routes" class="view">
-    <p class="viewnote">Every MCTS route, what's running on it right now, and how late it is. Pin the ones you ride.</p>
+    <p class="viewnote">Start with the lines near Helen. Each one says the street it follows and where it takes you.</p>
     <table class="ledger" id="routetable">
-      <thead><tr><th></th><th>Route</th><th>Out now</th><th>Worst delay</th><th></th></tr></thead>
+      <thead><tr><th></th><th>Where it goes</th><th>Now</th><th>Delay</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
 
-  <section id="view-plan" class="view">
-    <p class="viewnote">Your regular trips, watched live. Next bus, the one after, and whether either is late.</p>
+  <section id="view-plan" class="view active">
+    <div class="today-head">
+      <p class="eyebrow">From Helen's door</p>
+      <h1>Where are you headed?</h1>
+      <p>Live departures for the places you go, with the one after it and a clear warning when the service is slipping.</p>
+    </div>
     <div id="hotroutes"></div>
+    <div class="alert-callout">
+      <div><p class="eyebrow">Cell alerts</p><strong>Get a heads-up, not a surprise.</strong><p>Tell Hopscotch when to alert you for a bus that is close, late, or disrupted.</p></div>
+      <button class="btn secondary" data-open-alerts>Set alerts</button>
+    </div>
   </section>
 
   <section id="view-alerts" class="view">
-    <p class="viewnote">Straight from the MCTS alert feed, in plain English.</p>
+    <div class="alert-setup">
+      <p class="eyebrow">Cell alerts</p>
+      <h1>Only alert me when it matters.</h1>
+      <p>Choose a trip and a stop. Hopscotch watches the nearby route, then alerts you when it is close, delayed, or has a service change.</p>
+      <form id="alertform">
+        <label>Trip <select id="alerttrip" aria-label="Choose a trip"></select></label>
+        <label>Phone number <input id="alertphone" inputmode="tel" autocomplete="tel" placeholder="414 555 0123" required></label>
+        <label>Carrier <select id="alertcarrier" aria-label="Choose phone carrier"><option value="att">AT&amp;T</option><option value="tmobile">T-Mobile</option></select></label>
+        <fieldset><legend>Alert me for</legend><label><input type="checkbox" name="kind" value="approach" checked> Bus is 5 minutes from my stop</label><label><input type="checkbox" name="kind" value="delay" checked> Route is 8+ minutes late</label><label><input type="checkbox" name="kind" value="news" checked> Detours or no-service alerts</label></fieldset>
+        <button class="btn" type="submit">Save cell alerts</button>
+      </form>
+      <p id="alertsetupnote" class="setupnote">This is limited to the stop on your selected trip, not every bus in Milwaukee.</p>
+    </div>
+    <h2 class="secthead">Service alerts near your trips</h2>
     <div id="alertlist"></div>
     <h2 class="secthead">Ghost buses today</h2>
     <p class="viewnote">Trips the schedule promised that never showed up.</p>
@@ -89,6 +111,6 @@
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

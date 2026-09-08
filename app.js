@@ -4,7 +4,7 @@
 
 const LIVE_BASE = "https://raw.githubusercontent.com/tylerherman19/hopscotch/data/";
 const liveUrl = (f) => LIVE_BASE + f + "?cb=" + Math.floor(Date.now() / 20000);
-const DOWNTOWN = [43.0405, -87.9055];
+const HELENS = [43.03873, -87.91116]; // Wisconsin & Plankinton, the stop by Helen's home
 
 const S = {
   map: null, markers: null, shapeLayer: null, stopLayer: null,
@@ -13,7 +13,7 @@ const S = {
   selectedRoute: "", selectedVehicle: null,
   pins: new Set(JSON.parse(localStorage.getItem("hop_pins") || "[]")),
   pollTimer: null, lastPoll: 0,
-  planCache: {},
+  planCache: {}, hot: null,
 };
 
 /* ---------- helpers ---------- */
@@ -60,13 +60,13 @@ async function boot() {
   initMap();
   buildRoutePicker();
   renderRouteTable();
-  wireNav(); wireToggles(); loadHotRoutes().then(renderHotRoutes);
+  wireNav(); wireToggles(); loadHotRoutes().then(() => { renderHotRoutes(); renderRouteTable(); wireAlerts(); });
   refresh();
 }
 
 /* ---------- map ---------- */
 function initMap() {
-  S.map = L.map("map", { zoomControl: false, attributionControl: true }).setView(DOWNTOWN, 14);
+  S.map = L.map("map", { zoomControl: false, attributionControl: true }).setView(HELENS, 15);
   L.control.zoom({ position: "bottomright" }).addTo(S.map);
   L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
     attribution: 'Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | transit data MCTS / the Hop',
@@ -75,6 +75,8 @@ function initMap() {
   S.markers = L.layerGroup().addTo(S.map);
   S.shapeLayer = L.layerGroup().addTo(S.map);
   S.stopLayer = L.layerGroup().addTo(S.map);
+  L.circleMarker(HELENS, { radius: 7, color: "#111827", weight: 2, fillColor: "#ffffff", fillOpacity: 1 })
+    .bindTooltip("Helen's area", { direction: "top", offset: [0, -8] }).addTo(S.map);
   S.map.on("click", () => clearSelection());
   $("sheetclose").onclick = () => clearSelection();
 }
@@ -169,7 +171,7 @@ function selectVehicle(v) {
   const next = (v.next || []).map((n) =>
     `<tr><td>${esc(n.name)}</td><td class="arr">${fmtMin(n.in)}</td><td class="arr">${fmtClock(n.at)}</td></tr>`).join("");
   sheet(`
-    <h3><span class="routenum" style="border-left-color:#${r.color || "333"}">${esc(r.name)}</span>
+    <h3><span class="mode bus">Bus</span> <span class="routenum" style="border-left-color:#${r.color || "333"}">${esc(r.name)}</span>
       ${esc(r.long || "")} <span class="delaychip ${delayClass(v.delay)}">${delayText(v.delay)}</span></h3>
     <div class="sub">Bus ${esc(v.id)} &middot; next stops</div>
     <table class="ledger"><tbody>${next || '<tr><td>No upcoming stops in the feed.</td></tr>'}</tbody></table>
@@ -188,7 +190,7 @@ function selectHop(h) {
     return `<tr><td>${esc(st.name)}</td><td class="arr">${txt} <span class="est">est</span></td></tr>`;
   }).join("");
   sheet(`
-    <h3><span class="routenum" style="border-left-color:#${line.color}">HOP</span> ${esc(line.name)} Line
+    <h3><span class="mode hop">Hop</span> <span class="routenum" style="border-left-color:#${line.color}">HOP</span> ${esc(line.name)} Line
       <span class="delaychip ${h.delayed ? "warn" : "good"}">${h.delayed ? "delayed" : "running"}</span></h3>
     <div class="sub">${esc(h.name)} &middot; arrivals are estimates</div>
     <table class="ledger"><tbody>${rows}</tbody></table>`);
@@ -240,12 +242,12 @@ function buildRoutePicker() {
   const sel = $("routepick");
   for (const line of S.hop.routes) {
     const o = document.createElement("option");
-    o.value = "HOP:" + line.id; o.textContent = "Hop " + line.name;
+    o.value = "HOP:" + line.id; o.textContent = "Hop streetcar — " + line.name;
     sel.appendChild(o);
   }
   for (const r of S.routes) {
     const o = document.createElement("option");
-    o.value = r.id; o.textContent = r.name + " - " + (r.long || "");
+    o.value = r.id; o.textContent = "Bus " + r.name + " — " + routeDestination(r);
     sel.appendChild(o);
   }
   sel.onchange = () => {
@@ -256,7 +258,7 @@ function buildRoutePicker() {
     if (v.startsWith("HOP:")) {
       const rid = +v.slice(4);
       const line = S.hop.routes.find((x) => x.id === rid);
-      sheet(`<h3><span class="routenum" style="border-left-color:#${line.color}">HOP</span> ${esc(line.name)} Line</h3>
+      sheet(`<h3><span class="mode hop">Hop</span> <span class="routenum" style="border-left-color:#${line.color}">HOP</span> ${esc(line.name)} Line</h3>
         <div class="sub">Tap a streetcar or a stop for arrivals (always estimates). ${pinButtonHtml(v)}</div>`);
     } else {
       showRouteSheet(v);
@@ -269,8 +271,8 @@ function showRouteSheet(rid) {
   const preds = [];
   for (const v of S.live?.vehicles || []) if (v.route === rid) preds.push(v);
   const late = preds.filter((v) => v.delay != null && v.delay >= 480).length;
-  sheet(`<h3><span class="routenum" style="border-left-color:#${r.color}">${esc(r.name)}</span> ${esc(r.long || "")}</h3>
-    <div class="sub">${preds.length} out now &middot; ${late ? late + " running 8+ min late" : "nothing badly late"} &middot; tap a bus or stop</div>
+  sheet(`<h3><span class="mode bus">Bus</span> <span class="routenum" style="border-left-color:#${r.color}">${esc(r.name)}</span> ${esc(routeDestination(r))}</h3>
+    <div class="sub">On ${esc(r.long || "this route")} &middot; ${preds.length} out now &middot; ${late ? late + " running 8+ min late" : "no major delay right now"} &middot; tap a bus or stop</div>
     <div class="sub">${pinButtonHtml(rid)} ${textsNote()}</div>`);
 }
 
@@ -282,14 +284,16 @@ function renderRouteTable() {
     e.n++;
     if (v.delay != null) e.worst = Math.max(e.worst ?? -1e9, v.delay);
   }
-  tb.innerHTML = S.routes.map((r) => {
+  const near = new Set((S.hot || []).flatMap((trip) => trip.legs || []).filter((l) => l.kind === "bus").flatMap((l) => l.routes));
+  const ordered = [...S.routes].sort((a, b) => Number(near.has(b.id)) - Number(near.has(a.id)) || a.name.localeCompare(b.name, undefined, { numeric: true }));
+  tb.innerHTML = ordered.map((r) => {
     const e = byRoute[r.id] || { n: 0, worst: null };
     const pinned = S.pins.has(r.id);
     return `<tr class="clickable" data-route="${esc(r.id)}">
       <td><button class="pinbtn ${pinned ? "pinned" : ""}" data-pin="${esc(r.id)}" title="Pin to My routes">${pinned ? "&#9733;" : "&#9734;"}</button></td>
-      <td><span class="routenum" style="border-left-color:#${r.color}">${esc(r.name)}</span> <span class="rname">${esc(r.long || "")}</span></td>
-      <td class="num">${e.n || ""}</td>
-      <td class="num">${e.worst != null && e.worst >= 60 ? Math.round(e.worst / 60) + " min" : e.n ? "ok" : ""}</td>
+      <td><span class="mode bus">Bus</span> <span class="routenum" style="border-left-color:#${r.color}">${esc(r.name)}</span> <span class="rname">${esc(routeDestination(r))}</span><small>via ${esc(r.long || "")}${near.has(r.id) ? " · near Helen" : ""}</small></td>
+      <td class="num">${e.n ? e.n + " buses" : "—"}</td>
+      <td class="num">${e.worst != null && e.worst >= 60 ? Math.round(e.worst / 60) + " min late" : e.n ? "On time" : "—"}</td>
       <td class="num">&rsaquo;</td></tr>`;
   }).join("");
   tb.querySelectorAll("tr").forEach((tr) => tr.addEventListener("click", (ev) => {
@@ -378,7 +382,9 @@ async function renderSummary() {
     ["Worst routes", (s.worst_routes || []).join(", ") || "-"],
     ["Snapshots kept", s.snapshots],
   ];
-  el.innerHTML = `<div class="sumcard"><div class="row" style="font-weight:700"><span>Yesterday in MKE transit</span><span></span></div>` +
+  const hotStats = (s.reliability || []).filter((r) => ["14", "30"].includes(r.route));
+  const reliability = hotStats.length ? `<div class="reliability-grid">${hotStats.map((r) => `<div><strong>${esc(r.route)}</strong><span>${esc(r.on_time_pct)}% on time</span><small>${esc(r.samples)} checks</small></div>`).join("")}</div>` : '<p class="viewnote">Reliability needs a full day of collected checks. Check back tomorrow for the percentage that matters.</p>';
+  el.innerHTML = `<div class="summary-intro"><p class="eyebrow">Not just where it is now</p><h1>How did your routes actually do?</h1><p>“On time” means the live feed was under 3 minutes late when we checked it.</p></div>${reliability}<div class="sumcard"><div class="row" style="font-weight:700"><span>Yesterday across MCTS</span><span></span></div>` +
     rows.map(([l, v]) => `<div class="row"><span class="lbl">${esc(l)}</span><span class="val">${esc(v)}</span></div>`).join("") + "</div>";
 }
 
@@ -388,12 +394,21 @@ function switchView(name) {
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + name));
   if (name === "map") setTimeout(() => S.map.invalidateSize(), 50);
   if (name === "yesterday") renderSummary();
+  if (name === "alerts") setTimeout(() => $("alerttrip")?.focus(), 60);
 }
 function wireNav() {
   document.querySelectorAll(".navbtn").forEach((b) => b.addEventListener("click", () => switchView(b.dataset.view)));
 }
 function wireToggles() {
   for (const id of ["tg-bus", "tg-hop", "tg-mine"]) $(id).addEventListener("change", renderVehicles);
+}
+
+function routeDestination(r) {
+  const destinations = {
+    "14": "Downtown, East Side & Bay View", "30": "Marquette & Sherman Park",
+    "MCTS CONNECT 1": "Downtown & Wauwatosa", "18": "Downtown & Greenfield",
+  };
+  return destinations[r.id] || r.long || "See stops and direction";
 }
 
 /* ---------- hot routes (preset trips, watched live) ---------- */
@@ -422,13 +437,58 @@ function renderHotRoutes() {
   if (!el) return;
   if (!S.hot) { el.innerHTML = '<div class="empty">Loading...</div>'; return; }
   if (!S.hot.length) { el.innerHTML = '<div class="empty">No hot routes set up yet.</div>'; return; }
-  el.innerHTML = S.hot.map((r) => `
-    <div class="itin">
-      <div class="itin-head"><span>${esc(r.name)}</span><span class="num">${esc(r.from)} &rarr; ${esc(r.to)}</span></div>
-      ${r.legs.map((l) => l.kind === "walk"
-        ? `<div class="leg walk"><span class="when"></span><span>${esc(l.text)}</span></div>`
-        : `<div class="leg"><span class="when">${l.kind === "hop" ? "HOP" : esc(l.routes.join("/"))}</span>
-             <span>${esc(l.text)}<br>${legLive(l)}</span></div>`).join("")}
-    </div>`).join("");
+  el.innerHTML = S.hot.map((r) => {
+    const transitLeg = r.legs.find((l) => l.kind !== "walk");
+    const live = transitLeg ? legLive(transitLeg) : "";
+    const type = transitLeg?.kind === "hop" ? "hop" : "bus";
+    const line = transitLeg?.kind === "hop" ? "Hop streetcar" : `Bus ${transitLeg?.routes?.join(" or ") || ""}`;
+    return `<article class="trip-card ${type}" data-trip="${esc(r.id)}">
+      <div class="trip-top"><span class="mode ${type}">${type === "hop" ? "Hop" : "Bus"}</span><span class="trip-live">${live}</span></div>
+      <h2>${esc(r.name)}</h2>
+      <p class="trip-route">${esc(line)} <span>${esc(r.route_note || "")}</span></p>
+      <p class="trip-stops">${esc(r.from)} <b>→</b> ${esc(r.to)}</p>
+      <div class="trip-steps">${r.legs.map((l) => l.kind === "walk"
+        ? `<span class="walk-step">${esc(l.text)}</span>`
+        : `<span><strong>${esc(l.text)}</strong></span>`).join("")}</div>
+      <div class="trip-actions"><button class="textbtn" data-trip-map="${esc(r.id)}">See on map</button><button class="textbtn" data-trip-alert="${esc(r.id)}">Alert me</button></div>
+    </article>`;
+  }).join("");
+  el.querySelectorAll("[data-trip-map]").forEach((b) => b.addEventListener("click", () => openTripOnMap(b.dataset.tripMap)));
+  el.querySelectorAll("[data-trip-alert]").forEach((b) => b.addEventListener("click", () => openTripAlerts(b.dataset.tripAlert)));
+}
+
+function openTripOnMap(tripId) {
+  const trip = S.hot?.find((r) => r.id === tripId);
+  const leg = trip?.legs.find((l) => l.kind !== "walk");
+  if (!leg) return;
+  switchView("map");
+  const rid = leg.kind === "hop" ? "HOP:" + leg.route : leg.routes[0];
+  $("routepick").value = rid; S.selectedRoute = rid; drawShape(rid); renderVehicles();
+  if (leg.kind === "hop") return;
+  showRouteSheet(rid); schedulePoll();
+}
+
+function openTripAlerts(tripId) {
+  switchView("alerts");
+  $("alerttrip").value = tripId;
+}
+
+function wireAlerts() {
+  const select = $("alerttrip"), form = $("alertform");
+  if (!select || !form) return;
+  select.innerHTML = (S.hot || []).map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join("");
+  document.querySelectorAll("[data-open-alerts]").forEach((b) => b.addEventListener("click", () => switchView("alerts")));
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const trip = S.hot.find((r) => r.id === select.value);
+    const leg = trip?.legs.find((l) => l.kind !== "walk");
+    const phone = $("alertphone").value.replace(/\D/g, "");
+    const kinds = [...form.querySelectorAll("input[name=kind]:checked")].map((i) => i.value);
+    if (phone.length !== 10 || !leg || !kinds.length) { $("alertsetupnote").textContent = "Enter a 10-digit number and choose at least one kind of alert."; return; }
+    const watch = { trip: trip.id, phone, carrier: $("alertcarrier").value, route: leg.kind === "hop" ? "HOP" : leg.routes[0], stop: leg.board, kinds };
+    const watches = JSON.parse(localStorage.getItem("hop_alert_preferences") || "[]").filter((w) => w.trip !== watch.trip);
+    watches.push(watch); localStorage.setItem("hop_alert_preferences", JSON.stringify(watches));
+    $("alertsetupnote").innerHTML = `<strong>Saved on this phone.</strong> We will watch ${esc(trip.name)} at ${esc(leg.text)} for ${esc(kinds.join(", "))}. SMS delivery needs the collector's private alert list; this screen keeps the exact location-specific preference ready for it.`;
+  });
 }
 boot().catch((e) => { $("statusline").textContent = "failed to load - " + e.message; });
