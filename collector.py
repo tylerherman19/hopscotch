@@ -157,7 +157,7 @@ def poll_cycle(state):
                     stop_preds.setdefault(u.stop_id, []).append([tu.trip.route_id, at - ts, at, tid])
         fut.sort(key=lambda x: x[1])
         trip_next[tid] = [{"stop": s, "at": a, "in": a - ts,
-                           "name": stops_map.get(s, [""])[0]} for s, a in fut[:6]]
+                           "name": stops_map.get(s, [""])[0]} for s, a in fut[:16]]
     for tid, ds in delay_samples.items():
         ds.sort()
         trip_delay[tid] = ds[len(ds) // 2]
@@ -175,7 +175,7 @@ def poll_cycle(state):
             "id": v.vehicle.id, "trip": tid, "route": v.trip.route_id,
             "lat": round(v.position.latitude, 6), "lon": round(v.position.longitude, 6),
             "bearing": int(v.position.bearing), "speed": round(v.position.speed, 1),
-            "delay": trip_delay.get(tid), "next": trip_next.get(tid, [])[:4],
+            "delay": trip_delay.get(tid), "next": trip_next.get(tid, [])[:12],
         })
 
     # ghost detector
