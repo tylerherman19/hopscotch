@@ -60,7 +60,7 @@ async function boot() {
   initMap();
   buildRoutePicker();
   renderRouteTable();
-  wireNav(); wireToggles(); wirePlan();
+  wireNav(); wireToggles(); loadHotRoutes().then(renderHotRoutes);
   refresh();
 }
 
@@ -311,7 +311,7 @@ async function refresh() {
     S.live = live; S.lastPoll = Date.now();
     $("statusline").textContent = live.status || "All quiet";
     $("hopbanner").hidden = !live.hop_offline;
-    renderVehicles(); renderRouteTable(); renderAlerts(); renderGhosts();
+    renderVehicles(); renderRouteTable(); renderAlerts(); renderGhosts(); renderHotRoutes();
     const nb = (live.alerts?.length || 0) + (live.ghosts?.length || 0);
     $("alertbadge").hidden = nb === 0; $("alertbadge").textContent = nb;
   } catch (e) {
@@ -396,245 +396,39 @@ function wireToggles() {
   for (const id of ["tg-bus", "tg-hop", "tg-mine"]) $(id).addEventListener("change", renderVehicles);
 }
 
-/* ---------- plan (CSA over today's timetable, <=1 transfer) ---------- */
-function wirePlan() {
-  $("plan-go").addEventListener("click", runPlan);
+/* ---------- hot routes (preset trips, watched live) ---------- */
+async function loadHotRoutes() {
+  try { S.hot = (await fetchJson("data/hotroutes.json")).routes || []; }
+  catch { S.hot = []; }
 }
-async function geocode(q) {
-  const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&viewbox=-88.07,42.84,-87.82,43.20&bounded=0&q=" + encodeURIComponent(q + ", Milwaukee, WI");
-  const r = await fetchJson(url, { headers: { "Accept-Language": "en" } });
-  if (!r.length) throw new Error("no geocode for " + q);
-  return { lat: +r[0].lat, lon: +r[0].lon, label: r[0].display_name.split(",")[0] };
-}
-function nearestStops(lat, lon, maxM, cap) {
-  const out = [];
-  for (const [sid, st] of Object.entries(S.stops)) {
-    const d = hav([lat, lon], [st.lat, st.lon]);
-    if (d <= maxM) out.push([sid, d]);
+function legLive(leg) {
+  if (!S.live) return '<span class="arr">connecting...</span>';
+  if (leg.kind === "bus") {
+    const preds = ((S.live.stops || {})[leg.board] || []).filter((p) => leg.routes.includes(p[0]));
+    const nextTwo = preds.slice(0, 2).map((p) => `${fmtMin(p[1])} <span class="est">${fmtClock(p[2])}</span>`).join(", ");
+    const worst = Math.max(0, ...(S.live.vehicles || []).filter((v) => leg.routes.includes(v.route) && v.delay != null).map((v) => v.delay));
+    const chip = worst >= 240 ? ` <span class="delaychip ${delayClass(worst)}">${delayText(worst)}</span>` : "";
+    return nextTwo ? `<span class="arr">${nextTwo}</span>${chip}` : '<span class="arr">nothing listed soon</span>';
   }
-  out.sort((a, b) => a[1] - b[1]);
-  return out.slice(0, cap);
-}
-async function loadTimetable(rid) {
-  if (S.planCache[rid]) return S.planCache[rid];
-  const n = (S.tindex || {})[rid];
-  if (n == null) return null;
-  if (!S.planPacks) S.planPacks = {};
-  if (!S.planPacks[n]) S.planPacks[n] = fetchJson("data/tt-" + n + ".json");
-  const pack = await S.planPacks[n];
-  for (const k of Object.keys(pack)) S.planCache[k] = pack[k];
-  return S.planCache[rid] || null;
-}
-function activeServicesToday() {
-  return new Set(S.calendar[ctDateKey()] || []);
-}
-function hhmm(sec) {
-  let h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
-  const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
-  return h + ":" + String(m).padStart(2, "0") + " " + ap;
-}
-async function runPlan() {
-  const btn = $("plan-go"), out = $("plan-out");
-  const fromQ = $("plan-from").value.trim(), toQ = $("plan-to").value.trim();
-  if (!fromQ || !toQ) { out.innerHTML = '<p class="planmeta">Give me both ends.</p>'; return; }
-  btn.disabled = true; btn.textContent = "Working...";
-  out.innerHTML = '<p class="planmeta">Finding your trip...</p>';
-  try {
-    const [from, to] = await Promise.all([geocode(fromQ), geocode(toQ)]);
-    const dist = hav([from.lat, from.lon], [to.lat, to.lon]);
-    const nowSec = ctNowSec();
-    const oStops = nearestStops(from.lat, from.lon, 800, 6);
-    const dStops = nearestStops(to.lat, to.lon, 800, 6);
-    const itins = [];
-    if (dist < 900) {
-      itins.push({ legs: [{ kind: "walk", from: from.label, to: to.label, min: walkMin(dist) }], total: walkMin(dist), note: "Honestly, just walk it." });
-    }
-    // candidate routes
-    const oRoutes = new Set(), dRoutes = new Set();
-    for (const [sid] of oStops) (S.stopRoutes[sid] || []).forEach((r) => oRoutes.add(r));
-    for (const [sid] of dStops) (S.stopRoutes[sid] || []).forEach((r) => dRoutes.add(r));
-    const svcs = activeServicesToday();
-    const direct = [...oRoutes].filter((r) => dRoutes.has(r));
-    // load timetables
-    const transferRoutes = new Set([...direct]);
-    const dOnly = [...dRoutes].filter((r) => !direct.includes(r));
-    const oOnly = [...oRoutes].filter((r) => !direct.includes(r));
-    oOnly.forEach((r) => transferRoutes.add(r));
-    dOnly.forEach((r) => transferRoutes.add(r));
-    const tts = {};
-    await Promise.all([...transferRoutes].map(async (r) => { tts[r] = await loadTimetable(r).catch(() => null); }));
-    // direct trips
-    for (const rid of direct) {
-      const tt = tts[rid]; if (!tt) continue;
-      const best = findTrip(tt, svcs, rid, oStops, dStops, nowSec);
-      if (best) itins.push(best);
-    }
-    // one transfer
-    if (!itins.length) {
-      outer:
-      for (const r1 of oOnly) {
-        const tt1 = tts[r1]; if (!tt1) continue;
-        for (const r2 of dOnly) {
-          const tt2 = tts[r2]; if (!tt2) continue;
-          // shared stops between r1 and r2
-          const shared = new Set();
-          for (const key of Object.keys(tt1.stops)) for (const sid of tt1.stops[key]) {
-            if ((S.stopRoutes[sid] || []).includes(r2)) shared.add(sid);
-          }
-          if (!shared.size) continue;
-          const best = findTransfer(tt1, tt2, svcs, r1, r2, oStops, dStops, shared, nowSec);
-          if (best) { itins.push(best); break outer; }
-        }
-      }
-    }
-    // Hop variant
-    const hopItin = hopVariant(from, to);
-    if (hopItin) itins.push(hopItin);
-    renderItins(out, itins, from, to);
-  } catch (e) {
-    console.warn(e);
-    out.innerHTML = '<p class="planmeta">Could not plan that one. Try a street address or a known spot (e.g. "Fiserv Forum", "Mitchell Park Domes").</p>';
+  if (leg.kind === "hop") {
+    const preds = (S.live.hop_stops || {})[String(leg.board)] || [];
+    const nextTwo = preds.slice(0, 2).map((a) => `${fmtMin(a[0])} <span class="est">${fmtClock(a[1])} est</span>`).join(", ");
+    return nextTwo ? `<span class="arr">${nextTwo}</span>` : '<span class="arr">nothing listed soon</span>';
   }
-  btn.disabled = false; btn.textContent = "Plan my trip";
+  return "";
 }
-
-function ttTrips(tt, svcs) {
-  const out = [];
-  const svclist = tt.services || [];
-  for (const tr of tt.trips || []) {
-    const [tid, si, key, deltas] = tr;
-    if (si >= svclist.length || !svcs.has(svclist[si])) continue;
-    let acc = 0; const t = deltas.map((d) => (acc += d));
-    out.push({ id: tid, k: key, t, stops: tt.stops[key] });
-  }
-  return out;
+function renderHotRoutes() {
+  const el = $("hotroutes");
+  if (!el) return;
+  if (!S.hot) { el.innerHTML = '<div class="empty">Loading...</div>'; return; }
+  if (!S.hot.length) { el.innerHTML = '<div class="empty">No hot routes set up yet.</div>'; return; }
+  el.innerHTML = S.hot.map((r) => `
+    <div class="itin">
+      <div class="itin-head"><span>${esc(r.name)}</span><span class="num">${esc(r.from)} &rarr; ${esc(r.to)}</span></div>
+      ${r.legs.map((l) => l.kind === "walk"
+        ? `<div class="leg walk"><span class="when"></span><span>${esc(l.text)}</span></div>`
+        : `<div class="leg"><span class="when">${l.kind === "hop" ? "HOP" : esc(l.routes.join("/"))}</span>
+             <span>${esc(l.text)}<br>${legLive(l)}</span></div>`).join("")}
+    </div>`).join("");
 }
-function findTrip(tt, svcs, rid, oStops, dStops, nowSec) {
-  const oIds = new Map(oStops), dIds = new Map(dStops);
-  let best = null;
-  for (const tr of ttTrips(tt, svcs)) {
-    const stops = tr.stops;
-    let bi = -1, ai = -1;
-    for (let i = 0; i < stops.length; i++) {
-      if (bi < 0 && oIds.has(stops[i])) bi = i;
-      if (bi >= 0 && dIds.has(stops[i])) { ai = i; break; }
-    }
-    if (bi < 0 || ai < 0 || ai <= bi) continue;
-    const dep = tr.t[bi], arr = tr.t[ai];
-    if (dep < nowSec - 60) continue;
-    if (!best || dep < best.dep) {
-      const bSid = stops[bi], aSid = stops[ai];
-      best = { dep, arr, rid, bSid, aSid, dir: tt.headsign[tr.k.split(".")[0]] || "",
-        walkO: walkMin(oIds.get(bSid)), walkD: walkMin(dIds.get(aSid)) };
-    }
-  }
-  if (!best) return null;
-  const r = S.routeById[rid] || { name: rid };
-  return {
-    legs: [
-      { kind: "walk", to: S.stops[best.bSid].name, min: best.walkO },
-      { kind: "bus", route: r.name, color: r.color, dir: best.dir, at: best.dep, board: S.stops[best.bSid].name,
-        off: S.stops[best.aSid].name, arr: best.arr, min: Math.round((best.arr - best.dep) / 60) },
-      { kind: "walk", from: S.stops[best.aSid].name, min: best.walkD },
-    ],
-    total: Math.round((best.arr - nowSec) / 60) + best.walkD,
-    live: liveAdjust(best),
-  };
-}
-function liveAdjust(best) {
-  const preds = (S.live?.stops || {})[best.bSid] || [];
-  const p = preds.find((x) => x[0] === best.rid && Math.abs(x[2] - (Date.now() / 1000 - ctNowSec() + best.dep)) < 900);
-  if (!p) return null;
-  const midnight = Date.now() / 1000 - ctNowSec();
-  return { dep: Math.round(p[2] - midnight), live: true };
-}
-function findTransfer(tt1, tt2, svcs, r1, r2, oStops, dStops, shared, nowSec) {
-  const oIds = new Map(oStops), dIds = new Map(dStops);
-  let best = null;
-  const trips1 = ttTrips(tt1, svcs), trips2 = ttTrips(tt2, svcs);
-  for (const tr1 of trips1) {
-    const stops1 = tr1.stops;
-    let bi = -1, xi = -1;
-    for (let i = 0; i < stops1.length; i++) {
-      if (bi < 0 && oIds.has(stops1[i])) bi = i;
-      if (bi >= 0 && shared.has(stops1[i])) { xi = i; break; }
-    }
-    if (bi < 0 || xi < 0 || tr1.t[bi] < nowSec - 60) continue;
-    const xSid = stops1[xi], arrX = tr1.t[xi];
-    for (const tr2 of trips2) {
-      const stops2 = tr2.stops;
-      const xi2 = stops2.indexOf(xSid);
-      if (xi2 < 0) continue;
-      let ai = -1;
-      for (let i = xi2 + 1; i < stops2.length; i++) if (dIds.has(stops2[i])) { ai = i; break; }
-      if (ai < 0) continue;
-      const dep2 = tr2.t[xi2];
-      if (dep2 < arrX + 180) continue;
-      if (!best || tr2.t[ai] < best.arr) {
-        best = { dep: tr1.t[bi], arr: tr2.t[ai], r1, r2, bSid: stops1[bi], xSid, aSid: stops2[ai],
-          dep2, arrX, dir1: tt1.headsign[tr1.k.split(".")[0]] || "", dir2: tt2.headsign[tr2.k.split(".")[0]] || "",
-          walkO: walkMin(oIds.get(stops1[bi])), walkD: walkMin(dIds.get(stops2[ai])) };
-      }
-    }
-  }
-  if (!best) return null;
-  const R1 = S.routeById[r1] || { name: r1 }, R2 = S.routeById[r2] || { name: r2 };
-  return {
-    legs: [
-      { kind: "walk", to: S.stops[best.bSid].name, min: best.walkO },
-      { kind: "bus", route: R1.name, color: R1.color, dir: best.dir1, at: best.dep, board: S.stops[best.bSid].name, off: S.stops[best.xSid].name, arr: best.arrX, min: Math.round((best.arrX - best.dep) / 60) },
-      { kind: "transfer", at: S.stops[best.xSid].name, wait: Math.round((best.dep2 - best.arrX) / 60) },
-      { kind: "bus", route: R2.name, color: R2.color, dir: best.dir2, at: best.dep2, board: S.stops[best.xSid].name, off: S.stops[best.aSid].name, arr: best.arr, min: Math.round((best.arr - best.dep2) / 60) },
-      { kind: "walk", from: S.stops[best.aSid].name, min: best.walkD },
-    ],
-    total: Math.round((best.arr - nowSec) / 60) + best.walkD,
-  };
-}
-function hopVariant(from, to) {
-  if (!S.live || S.live.hop_offline) return null;
-  const hstops = S.hop.stops;
-  const near = (pt, cap) => hstops.map((s) => [s, hav(pt, [s.lat, s.lon])]).filter((x) => x[1] < 500).sort((a, b) => a[1] - b[1])[0];
-  const o = near([from.lat, from.lon]), d = near([to.lat, to.lon]);
-  if (!o || !d || o[0].id === d[0].id || o[0].route !== d[0].route) return null;
-  const arr = (S.live.hop_stops || {})[String(o[0].id)];
-  if (!arr || !arr.length) return null;
-  const line = S.hop.routes.find((r) => r.id === o[0].route);
-  const stopsBetween = Math.abs(hstops.filter((s) => s.route === o[0].route).findIndex((s) => s.id === o[0].id) -
-    hstops.filter((s) => s.route === o[0].route).findIndex((s) => s.id === d[0].id));
-  const rideMin = Math.max(2, stopsBetween * 3);
-  const depSec = arr[0][0];
-  const midnight = Date.now() / 1000 - ctNowSec();
-  const atSec = Math.round(arr[0][1] - midnight);
-  return {
-    legs: [
-      { kind: "walk", to: o[0].name + " (Hop)", min: walkMin(o[1]) },
-      { kind: "bus", route: "Hop " + line.name, color: line.color, dir: "", at: atSec, board: o[0].name, off: d[0].name, arr: atSec + rideMin * 60, min: rideMin, est: true },
-      { kind: "walk", from: d[0].name + " (Hop)", min: walkMin(d[1]) },
-    ],
-    total: Math.round(depSec / 60) + rideMin + walkMin(d[1]),
-    note: "Hop times are estimates.",
-  };
-}
-function renderItins(out, itins, from, to) {
-  if (!itins.length) {
-    out.innerHTML = '<p class="planmeta">No bus gets that done soon. Try different endpoints or check back closer to rush hour.</p>';
-    return;
-  }
-  itins.sort((a, b) => a.total - b.total);
-  out.innerHTML = itins.slice(0, 3).map((it) => {
-    const legs = it.legs.map((l) => {
-      if (l.kind === "walk") return `<div class="leg walk"><span class="when"></span><span>Walk ${l.min} min${l.to ? " to " + esc(l.to) : l.from ? " from " + esc(l.from) : ""}</span></div>`;
-      if (l.kind === "transfer") return `<div class="leg walk"><span class="when"></span><span>Transfer at ${esc(l.at)} - ${l.wait} min wait</span></div>`;
-      return `<div class="leg"><span class="when">${hhmm(l.at)}</span>
-        <span>Take the <b>${esc(l.route)}</b>${l.dir ? " " + esc(l.dir.toLowerCase()) : ""}, ${l.min} min, off at ${esc(l.off)}${l.est ? ' <span class="arr"><span class="est">est</span></span>' : ""}</span></div>`;
-    }).join("");
-    const arrLeg = [...it.legs].reverse().find((l) => l.kind === "bus");
-    return `<div class="itin">
-      <div class="itin-head"><span>About ${it.total} min</span><span class="num">${arrLeg ? "there by " + hhmm(arrLeg.arr) : ""}</span></div>
-      ${legs}
-      ${it.note ? `<div class="leg walk"><span class="when"></span><span>${esc(it.note)}</span></div>` : ""}
-    </div>`;
-  }).join("") + `<p class="planmeta">From ${esc(from.label)} to ${esc(to.label)}. Scheduled times${itins.some(i=>i.live) ? ", first leg adjusted live where marked" : ""}.</p>`;
-}
-
 boot().catch((e) => { $("statusline").textContent = "failed to load - " + e.message; });
