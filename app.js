@@ -100,7 +100,7 @@ function renderVehicles() {
     if (only && v.route !== only) continue;
     if (mine && !S.pins.has(v.route)) continue;
     const m = L.marker([v.lat, v.lon], { icon: vehIcon(delayColor(v.delay), v.route), zIndexOffset: 100 })
-      .on("click", (e) => { L.DomEvent.stopPropagation(e); selectVehicle(v); });
+      .on("click", (e) => { L.DomEvent.stopPropagation(e); S.tracking ? updateBusTracking() : selectVehicle(v); });
     m.addTo(S.markers);
   }
   for (const h of S.live.hop) {
@@ -154,12 +154,20 @@ function drawShape(routeId) {
 }
 
 /* ---------- selection / sheet ---------- */
-function sheet(html) {
+function sheet(html, mode = "") {
   $("sheetbody").innerHTML = html;
+  $("sheet").classList.toggle("tracking-sheet", mode === "tracking");
   $("sheet").hidden = false;
+}
+function setTrackingChrome(active) {
+  for (const id of ["mapcontrols", "mapkey", "refreshnote"]) {
+    const el = $(id);
+    if (el) el.hidden = active;
+  }
 }
 function clearSelection() {
   S.selectedVehicle = null; S.selectedRoute = ""; S.tracking = null;
+  setTrackingChrome(false);
   $("routepick").value = "";
   S.shapeLayer.clearLayers(); S.stopLayer.clearLayers();
   $("sheet").hidden = true;
@@ -257,6 +265,7 @@ function buildRoutePicker() {
     const v = sel.value;
     if (!v) return clearSelection();
     S.tracking = null;
+    setTrackingChrome(false);
     S.selectedRoute = v; S.selectedVehicle = null;
     drawShape(v); renderVehicles(); schedulePoll();
     if (v.startsWith("HOP:")) {
@@ -304,6 +313,7 @@ function renderRouteTable() {
     if (ev.target.dataset.pin) return;
     const rid = tr.dataset.route;
     S.tracking = null;
+    setTrackingChrome(false);
     switchView("map");
     $("routepick").value = rid;
     S.selectedRoute = rid; S.selectedVehicle = null;
@@ -507,6 +517,7 @@ function startBusTracking(tripId) {
   };
   S.selectedRoute = next.prediction[0];
   S.selectedVehicle = null;
+  setTrackingChrome(true);
   switchView("map");
   $("routepick").value = S.selectedRoute;
   drawShape(S.selectedRoute);
@@ -525,6 +536,7 @@ function stopBusTracking(arrived) {
   S.tracking = null;
   S.selectedVehicle = null;
   S.selectedRoute = "";
+  setTrackingChrome(false);
   $("routepick").value = "";
   S.shapeLayer.clearLayers();
   S.stopLayer.clearLayers();
@@ -537,17 +549,18 @@ function stopBusTracking(arrived) {
 }
 
 function renderTrackedBusSheet(vehicle, destinationPrediction) {
-  const next = (vehicle.next || []).slice(0, 4).map((n) =>
-    "<tr><td>" + esc(n.name) + '</td><td class="arr">' + fmtMin(n.in) +
-    '</td><td class="arr">' + fmtClock(n.at) + "</td></tr>"
-  ).join("");
+  const nextStop = (vehicle.next || []).find((n) => n.in >= -30) || (vehicle.next || [])[0];
   const arrival = destinationPrediction?.[2] || S.tracking.expectedArrival;
+  const nextName = nextStop?.name || "Waiting for the next reported stop";
+  const nextTime = nextStop ? fmtMin(nextStop.in) : "updating";
   sheet(
     '<h3><span class="mode bus">Bus</span> Tracking bus ' + esc(S.tracking.route) + "</h3>" +
-    '<div class="sub">Only this bus is on the map. Following it to ' + esc(S.tracking.destinationName) +
-    " at about " + esc(fmtClock(arrival)) + ".</div>" +
-    '<table class="ledger"><tbody>' + (next || '<tr><td>Waiting for its next stops...</td></tr>') + "</tbody></table>" +
-    '<div class="sub" style="margin-top:8px"><button class="btn" data-stop-tracking style="padding:7px 12px;font-size:0.8rem">Show all buses</button></div>'
+    '<div class="tracking-summary">' +
+      '<div class="tracking-destination"><span>To ' + esc(S.tracking.destinationName) + '</span><strong>' + esc(fmtClock(arrival)) + "</strong></div>" +
+      '<div class="tracking-next"><span>Next stop</span><strong>' + esc(nextName) + '</strong><em>' + esc(nextTime) + "</em></div>" +
+    "</div>" +
+    '<div class="tracking-footer"><span>Live location · updates every 15 sec</span><button class="btn" data-stop-tracking>Show all buses</button></div>',
+    "tracking"
   );
   const stopButton = document.querySelector("[data-stop-tracking]");
   if (stopButton) stopButton.onclick = () => stopBusTracking(false);
@@ -575,7 +588,8 @@ function updateBusTracking() {
     sheet(
       '<h3><span class="mode bus">Bus</span> Finding bus ' + esc(tracked.route) + "</h3>" +
       '<div class="sub">This is the next scheduled bus for ' + esc(tracked.tripName) +
-      ". Its live location will appear here as soon as MCTS reports it.</div>"
+      ". Its live location will appear here as soon as MCTS reports it.</div>",
+      "tracking"
     );
     return;
   }
@@ -641,6 +655,7 @@ function renderMapQuickRoutes() {
 
 function openTripOnMap(tripId) {
   S.tracking = null;
+  setTrackingChrome(false);
   const trip = S.hot?.find((r) => r.id === tripId);
   const leg = trip?.legs.find((l) => l.kind !== "walk");
   if (!leg) return;
