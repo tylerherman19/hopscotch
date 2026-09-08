@@ -34,16 +34,26 @@
     <div id="mapwrap">
       <div id="map"></div>
       <div id="mapcontrols">
-        <div class="home-control"><strong>Near Helen</strong><span>Wisconsin &amp; Plankinton</span></div>
+        <div class="map-panel">
+          <div class="home-control"><strong>Near Helen</strong><span>Wisconsin &amp; Plankinton</span></div>
+          <div class="mode-tabs" role="group" aria-label="Choose transit to show">
+            <button class="mode-tab active" data-layer-mode="both">All transit</button>
+            <button class="mode-tab bus-tab" data-layer-mode="bus">Bus</button>
+            <button class="mode-tab hop-tab" data-layer-mode="hop">Hop streetcar</button>
+          </div>
+          <div class="map-quick" aria-label="Quick routes near Helen">
+            <button data-map-route="14">Bus 14</button><button data-map-route="30">Bus 30</button><button data-map-route="HOP:7">Hop M</button><button data-map-route="HOP:4">Hop L</button>
+          </div>
+        </div>
         <div class="ctl-row">
           <select id="routepick" aria-label="Show a route from Helen's area">
             <option value="">Show a route&hellip;</option>
           </select>
         </div>
         <div class="ctl-row toggles">
-          <label><input type="checkbox" id="tg-bus" checked> Buses</label>
-          <label><input type="checkbox" id="tg-hop" checked> Hop</label>
-          <label><input type="checkbox" id="tg-mine"> My routes</label>
+          <input type="checkbox" id="tg-bus" checked hidden>
+          <input type="checkbox" id="tg-hop" checked hidden>
+          <label><input type="checkbox" id="tg-mine"> Starred routes only</label>
         </div>
       </div>
       <div id="livelabel"><span id="livedot"></span><span id="liveage">connecting&hellip;</span></div>
@@ -80,9 +90,15 @@
     <div class="alert-setup">
       <p class="eyebrow">Cell alerts</p>
       <h1>Only alert me when it matters.</h1>
-      <p>Choose a trip and a stop. The alert collector watches that nearby route for a close bus, delay, or service change.</p>
+      <p>Set the time you need to arrive. Hopscotch works backward to a leave-by time, then watches the right stop for a close bus, delay, or service change.</p>
       <form id="alertform">
         <label>Trip <select id="alerttrip" aria-label="Choose a trip"></select></label>
+        <label>Need to arrive by <input id="arriveby" type="time" required></label>
+        <div class="leave-plan" id="leaveplan" aria-live="polite"></div>
+        <fieldset class="days-fieldset"><legend>Repeat on</legend>
+          <div class="day-presets"><button type="button" data-day-preset="school">School days</button><button type="button" data-day-preset="every">Every day</button></div>
+          <div class="day-toggle-group" aria-label="Days to repeat"><label><input type="checkbox" name="day" value="Mon" checked> Mon</label><label><input type="checkbox" name="day" value="Tue" checked> Tue</label><label><input type="checkbox" name="day" value="Wed" checked> Wed</label><label><input type="checkbox" name="day" value="Thu" checked> Thu</label><label><input type="checkbox" name="day" value="Fri" checked> Fri</label><label><input type="checkbox" name="day" value="Sat"> Sat</label><label><input type="checkbox" name="day" value="Sun"> Sun</label></div>
+        </fieldset>
         <label>Phone number <input id="alertphone" inputmode="tel" autocomplete="tel" placeholder="414 555 0123" required></label>
         <label>Carrier <select id="alertcarrier" aria-label="Choose phone carrier"><option value="att">AT&amp;T</option><option value="tmobile">T-Mobile</option></select></label>
         <fieldset><legend>Alert me for</legend><label><input type="checkbox" name="kind" value="approach" checked> Bus is 5 minutes from my stop</label><label><input type="checkbox" name="kind" value="delay" checked> Route is 8+ minutes late</label><label><input type="checkbox" name="kind" value="news" checked> Detours or no-service alerts</label></fieldset>

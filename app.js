@@ -401,6 +401,18 @@ function wireNav() {
 }
 function wireToggles() {
   for (const id of ["tg-bus", "tg-hop", "tg-mine"]) $(id).addEventListener("change", renderVehicles);
+  document.querySelectorAll("[data-layer-mode]").forEach((button) => button.addEventListener("click", () => {
+    const mode = button.dataset.layerMode;
+    $("tg-bus").checked = mode !== "hop";
+    $("tg-hop").checked = mode !== "bus";
+    document.querySelectorAll("[data-layer-mode]").forEach((b) => b.classList.toggle("active", b === button));
+    renderVehicles();
+  }));
+  document.querySelectorAll("[data-map-route]").forEach((button) => button.addEventListener("click", () => {
+    const rid = button.dataset.mapRoute;
+    $("routepick").value = rid;
+    $("routepick").dispatchEvent(new Event("change"));
+  }));
 }
 
 function routeDestination(r) {
@@ -471,24 +483,61 @@ function openTripOnMap(tripId) {
 function openTripAlerts(tripId) {
   switchView("alerts");
   $("alerttrip").value = tripId;
+  updateLeavePlan();
 }
 
 function wireAlerts() {
-  const select = $("alerttrip"), form = $("alertform");
+  const select = $("alerttrip"), form = $("alertform"), arriveBy = $("arriveby");
   if (!select || !form) return;
   select.innerHTML = (S.hot || []).map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join("");
+  arriveBy.value = "08:30";
+  select.addEventListener("change", updateLeavePlan);
+  arriveBy.addEventListener("input", updateLeavePlan);
+  form.querySelectorAll("input[name=day]").forEach((input) => input.addEventListener("change", updateLeavePlan));
+  form.querySelectorAll("[data-day-preset]").forEach((button) => button.addEventListener("click", () => {
+    const school = button.dataset.dayPreset === "school";
+    form.querySelectorAll("input[name=day]").forEach((input) => {
+      input.checked = button.dataset.dayPreset === "every" || (school && !["Sat", "Sun"].includes(input.value));
+    });
+    updateLeavePlan();
+  }));
   document.querySelectorAll("[data-open-alerts]").forEach((b) => b.addEventListener("click", () => switchView("alerts")));
+  updateLeavePlan();
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const trip = S.hot.find((r) => r.id === select.value);
     const leg = trip?.legs.find((l) => l.kind !== "walk");
     const phone = $("alertphone").value.replace(/\D/g, "");
     const kinds = [...form.querySelectorAll("input[name=kind]:checked")].map((i) => i.value);
-    if (phone.length !== 10 || !leg || !kinds.length) { $("alertsetupnote").textContent = "Enter a 10-digit number and choose at least one kind of alert."; return; }
-    const watch = { trip: trip.id, phone, carrier: $("alertcarrier").value, route: leg.kind === "hop" ? "HOP" : leg.routes[0], stop: leg.board, kinds };
+    const days = [...form.querySelectorAll("input[name=day]:checked")].map((i) => i.value);
+    const leaveBy = calculateLeaveBy(trip, arriveBy.value);
+    if (phone.length !== 10 || !leg || !kinds.length || !days.length || !leaveBy) { $("alertsetupnote").textContent = "Enter a 10-digit number, an arrival time, and choose at least one alert and one day."; return; }
+    const watch = { trip: trip.id, phone, carrier: $("alertcarrier").value, route: leg.kind === "hop" ? "HOP" : leg.routes[0], stop: leg.board, kinds, days, arrive_by: arriveBy.value, leave_by: leaveBy };
     const watches = JSON.parse(localStorage.getItem("hop_alert_preferences") || "[]").filter((w) => w.trip !== watch.trip);
     watches.push(watch); localStorage.setItem("hop_alert_preferences", JSON.stringify(watches));
-    $("alertsetupnote").innerHTML = `<strong>Saved on this phone.</strong> We will watch ${esc(trip.name)} at ${esc(leg.text)} for ${esc(kinds.join(", "))}. SMS delivery needs the collector's private alert list; this screen keeps the exact location-specific preference ready for it.`;
+    $("alertsetupnote").innerHTML = `<strong>Saved on this phone.</strong> ${esc(trip.name)} is set for ${esc(days.join(", "))}: arrive by ${esc(formatTime(arriveBy.value))}, leave by ${esc(formatTime(leaveBy))}. SMS delivery still needs the collector's private alert list; this screen keeps the exact location, schedule, and alert preference ready for it.`;
   });
+}
+
+function calculateLeaveBy(trip, arriveBy) {
+  if (!arriveBy || !trip) return "";
+  const [hour, minute] = arriveBy.split(":").map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return "";
+  const minutes = (hour * 60 + minute - (trip.travel_min || 20) - 5 + 1440) % 1440;
+  return String(Math.floor(minutes / 60)).padStart(2, "0") + ":" + String(minutes % 60).padStart(2, "0");
+}
+function formatTime(value) {
+  if (!value) return "—";
+  const [hour, minute] = value.split(":").map(Number);
+  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(2020, 0, 1, hour, minute));
+}
+function updateLeavePlan() {
+  const select = $("alerttrip"), arriveBy = $("arriveby"), plan = $("leaveplan");
+  if (!select || !arriveBy || !plan) return;
+  const trip = S.hot?.find((r) => r.id === select.value);
+  const leaveBy = calculateLeaveBy(trip, arriveBy.value);
+  const days = [...document.querySelectorAll("#alertform input[name=day]:checked")].map((i) => i.value);
+  if (!trip || !leaveBy) { plan.textContent = "Choose a trip and arrival time to see the leave-by plan."; return; }
+  plan.innerHTML = `<strong>Leave by ${esc(formatTime(leaveBy))}</strong><span>${esc(trip.travel_min || 20)} min trip + 5 min buffer · ${esc(days.join(", ") || "choose days")}</span>`;
 }
 boot().catch((e) => { $("statusline").textContent = "failed to load - " + e.message; });
