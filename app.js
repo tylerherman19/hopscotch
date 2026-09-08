@@ -481,7 +481,7 @@ function tripNextSummary(trip, leg) {
   const inSecs = leg.kind === "bus" ? prediction[1] : prediction[0];
   const arrivalEpoch = departureEpoch + (trip.travel_min || 20) * 60;
   const delay = leg.kind === "bus" ? Math.max(0, ...(S.live.vehicles || []).filter((v) => leg.routes.includes(v.route) && v.delay != null).map((v) => v.delay)) : null;
-  return `<div class="next-summary"><span class="next-label">Next ${esc(routeLabel)} to ${esc(trip.to)}</span><strong><span class="next-minutes">${esc(fmtMin(inSecs))}</span> <span>until it is here</span></strong><small>Departs ${esc(fmtClock(departureEpoch))} · gets you to ${esc(trip.to)} about ${esc(fmtClock(arrivalEpoch))}${leg.kind === "hop" ? " · estimate" : ""}</small>${delay >= 240 ? `<span class="delaychip ${delayClass(delay)}">${delayText(delay)}</span>` : ""}</div>`;
+  return `<div class="next-summary"><span class="next-label">Next ${esc(routeLabel)} to ${esc(trip.to)}</span><strong><span class="next-minutes">${esc(fmtMin(inSecs))}</span> <span>until it is here</span></strong><span class="depart-line">Leaves ${esc(fmtClock(departureEpoch))}</span><span class="arrival-line">At ${esc(trip.to)} about <b>${esc(fmtClock(arrivalEpoch))}</b>${leg.kind === "hop" ? " · estimate" : ""}</span>${delay >= 240 ? `<span class="delaychip ${delayClass(delay)}">${delayText(delay)}</span>` : ""}</div>`;
 }
 
 function renderMapQuickRoutes() {
