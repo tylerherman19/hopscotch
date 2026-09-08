@@ -488,9 +488,23 @@ function routeDestination(r) {
 }
 
 /* ---------- hot routes (preset trips, watched live) ---------- */
+function syncPinsToHotRoutes() {
+  const routeIds = (S.hot || [])
+    .flatMap((trip) => trip.legs || [])
+    .flatMap((leg) => {
+      if (leg.kind === "bus") return leg.routes || [];
+      if (leg.kind === "hop" && leg.route != null) return ["HOP:" + leg.route];
+      return [];
+    });
+  if (!routeIds.length) return;
+  S.pins = new Set(routeIds);
+  localStorage.setItem("hop_pins", JSON.stringify([...S.pins]));
+}
 async function loadHotRoutes() {
-  try { S.hot = (await fetchJson("data/hotroutes.json")).routes || []; }
-  catch { S.hot = []; }
+  try {
+    S.hot = (await fetchJson("data/hotroutes.json")).routes || [];
+    syncPinsToHotRoutes();
+  } catch { S.hot = []; }
 }
 function legLive(leg) {
   if (!S.live) return '<span class="arr">connecting...</span>';
