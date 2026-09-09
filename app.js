@@ -3,7 +3,7 @@
 "use strict";
 
 const LIVE_BASE = "https://raw.githubusercontent.com/tylerherman19/hopscotch/data/";
-const liveUrl = (f) => LIVE_BASE + f + "?cb=" + Math.floor(Date.now() / 20000);
+const liveUrl = (f) => LIVE_BASE + f + "?cb=" + Math.floor(Date.now() / 30000);
 const HELENS = [43.03873, -87.91116]; // Wisconsin & Plankinton, the stop by Helen's home
 
 const S = {
@@ -46,7 +46,7 @@ const walkMin = (m) => Math.max(1, Math.round(m / 80)); // ~3 mph
 
 async function fetchJson(url, opts) {
   const r = await fetch(url, opts);
-  if (!r.ok) throw new Error(url + " -> " + r.status);
+  if (!r.ok) { const e = new Error(url + " -> " + r.status); e.status = r.status; throw e; }
   return r.json();
 }
 
@@ -355,10 +355,12 @@ function renderRouteTable() {
 }
 
 /* ---------- live polling ---------- */
+let liveFails = 0; // consecutive live-fetch failures; drives the backoff in schedulePoll()
 async function refresh() {
   const btn = $("liveage");
   try {
     const live = await fetchJson(liveUrl("live.json"));
+    liveFails = 0;
     S.live = live; S.lastPoll = Date.now();
     $("statusline").textContent = live.status || "All quiet";
     $("hopbanner").hidden = !live.hop_offline;
@@ -366,6 +368,7 @@ async function refresh() {
     const nb = (live.alerts?.length || 0) + (live.ghosts?.length || 0);
     $("alertbadge").hidden = nb === 0; $("alertbadge").textContent = nb;
   } catch (e) {
+    liveFails++;
     console.warn("live fetch failed", e);
   }
   schedulePoll();
@@ -373,7 +376,12 @@ async function refresh() {
 function schedulePoll() {
   clearTimeout(S.pollTimer);
   const poking = !!(S.selectedRoute || S.selectedVehicle || !$("sheet").hidden);
-  S.pollTimer = setTimeout(refresh, S.tracking ? 15000 : poking ? 20000 : 60000);
+  let delay = S.tracking ? 15000 : poking ? 15000 : 30000;
+  if (liveFails > 0) {
+    // Rate-limits or repeated errors: back off 30s, 1m, 2m, 4m, capped at 5m.
+    delay = Math.max(delay, Math.min(300000, 30000 * 2 ** Math.min(liveFails - 1, 4)));
+  }
+  S.pollTimer = setTimeout(refresh, delay);
   tickAge();
   clearInterval(S.ageTimer);
   S.ageTimer = setInterval(tickAge, 5000);
