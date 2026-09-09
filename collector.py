@@ -8,7 +8,7 @@ Modes:
 
 Data lives on the `data` orphan branch, checked out at ./live in Actions.
 """
-import json, os, smtplib, subprocess, sys, time, urllib.request
+import json, os, smtplib, subprocess, sys, time, urllib.error, urllib.request
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from zoneinfo import ZoneInfo
@@ -20,7 +20,7 @@ RT = "https://realtime.ridemcts.com/gtfsrt"
 HOP = "https://thehopmke.transloc.com/Services/JSONPRelay.svc"
 LIVE = "live"
 POLL_SECS = 25
-PUSH_SECS = 60
+PUSH_SECS = 30
 ARCHIVE_EVERY = 15 * 60
 GHOST_GRACE_SECS = 12 * 60
 
@@ -29,8 +29,23 @@ def today_key(): return now_ct().strftime("%Y%m%d")
 
 def fetch_bytes(url, timeout=20):
     req = urllib.request.Request(url, headers={"User-Agent": "hopscotch-collector/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+    delay = 2
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read()
+        except urllib.error.HTTPError as e:
+            retryable = e.code == 429 or 500 <= e.code < 600
+            if not retryable or attempt == 3:
+                raise
+            try:
+                delay = max(delay, int(e.headers.get("Retry-After", 0) or 0))
+            except (TypeError, ValueError):
+                pass
+            print(f"fetch {e.code}, backing off {delay}s: {url}", file=sys.stderr)
+            time.sleep(delay)
+            delay *= 2
+    raise RuntimeError("fetch_bytes: unreachable")
 
 def fetch_json(url, timeout=20):
     return json.loads(fetch_bytes(url, timeout))
