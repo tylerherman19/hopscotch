@@ -311,7 +311,7 @@ function ingestVehicles(list, isHop) {
         stale: false, el: null, x: 0, y: 0,
       };
       st.el = makeVehEl(st);
-      S.vlayer.appendChild(st.el);
+      if (S.vlayer) S.vlayer.appendChild(st.el);
       S.veh.set(id, st);
     } else {
       // retarget: ease toward the new fix over ~1s
@@ -319,7 +319,7 @@ function ingestVehicles(list, isHop) {
       st.v = v; st.key = key; st.lastUpd = now;
       st.speed = v.speed || 0; st.delay = v.delay ?? null;
     }
-    if (st.el && !st.el.isConnected) S.vlayer.appendChild(st.el);
+    if (st.el && !st.el.isConnected && S.vlayer) S.vlayer.appendChild(st.el);
   }
   // retire vehicles gone >3 min (they ghost first via stale class)
   for (const [id, st] of S.veh) {
@@ -886,7 +886,7 @@ async function boot() {
   boardSkeleton();
   $("mast-date").textContent = ctDateFmt.format(new Date()).toUpperCase();
   try { await ensureMapLibre(); } catch (e) { /* map failed; board still works */ }
-  if (window.maplibregl) initMap();
+  if (window.maplibregl) { try { initMap(); } catch (e) { console.error(e); S.map = null; /* board-only mode */ } }
   try {
     await loadStatic();
   } catch (e) { console.error(e); $("board-error").hidden = false; $("board-error-text").textContent = "STATIC DATA FAILED TO LOAD · RETRYING"; return; }
