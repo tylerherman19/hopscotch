@@ -8,8 +8,8 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75,500;75,700;100,400;100,600;100,800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=8">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wdth,wght@75,500;75,700;100,400;100,600;100,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
 
@@ -22,11 +22,11 @@
 </header>
 
 <nav id="navstrip">
-  <button class="navbtn active" data-view="plan"><span aria-hidden="true">●</span><span>Today</span></button>
-  <button class="navbtn" data-view="map"><span aria-hidden="true">⌖</span><span>Map</span></button>
-  <button class="navbtn" data-view="routes"><span aria-hidden="true">≡</span><span>Explore</span></button>
-  <button class="navbtn" data-view="alerts"><span aria-hidden="true">!</span><span>Alerts</span><span id="alertbadge" class="badge" hidden></span></button>
-  <button class="navbtn" data-view="yesterday"><span aria-hidden="true">↗</span><span>Reliability</span></button>
+  <button class="navbtn active" data-view="plan"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 17h16M6 17V9l6-4 6 4v8M9 13h6"/></svg><span>Today</span></button>
+  <button class="navbtn" data-view="map"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 6 5-2 6 2 5-2v14l-5 2-6-2-5 2V6Zm5-2v14m6-12v14"/></svg><span>Map</span></button>
+  <button class="navbtn" data-view="routes"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14"/></svg><span>Explore</span></button>
+  <button class="navbtn" data-view="alerts"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7ZM10 20h4"/></svg><span>Alerts</span><span id="alertbadge" class="badge" hidden></span></button>
+  <button class="navbtn" data-view="yesterday"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 18V9m6 9V5m6 13v-6m4 6H2"/></svg><span>Reliability</span></button>
 </nav>
 
 <main>
@@ -76,8 +76,9 @@
   <section id="view-plan" class="view active">
     <div class="today-head">
       <p class="eyebrow">From Helen's door</p>
-      <h1>Where are you headed?</h1>
-      <p>Live departures for the places you go, with the one after it and a clear warning when the service is slipping.</p>
+      <h1>Your next ride.<br>Right when you need it.</h1>
+      <p>Live departures for the places you go, with the one after it and a clear warning when service slips.</p>
+      <button class="btn hero-cta" onclick="switchView('map')"><span>Open live map</span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button>
     </div>
     <div id="hotroutes"></div>
     <div class="alert-callout">
@@ -127,6 +128,6 @@
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=11"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>
