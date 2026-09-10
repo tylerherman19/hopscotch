@@ -3,131 +3,140 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Hopscotch - MKE live transit</title>
-<meta name="description" content="Every Milwaukee bus and Hop streetcar live on one map, with arrival predictions.">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<title>Hopscotch — MKE live transit</title>
+<meta name="description" content="Milwaukee's live transit console: real-time MCTS buses and the Hop streetcar, departures from your corner, trip tracking.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a0f18'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%232f7cf6'/%3E%3Ccircle cx='16' cy='16' r='10.5' fill='none' stroke='%232f7cf6' stroke-opacity='.45' stroke-width='2'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wdth,wght@75,500;75,700;100,400;100,600;100,700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=10">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<link href="styles.css" rel="stylesheet">
 </head>
 <body>
 
+<!-- Boot choreography overlay -->
+<div id="boot" aria-hidden="true">
+  <div class="boot-inner">
+    <div class="boot-mark"><span class="boot-dot"></span>HOPSCOTCH</div>
+    <div class="boot-sub">MKE LIVE TRANSIT</div>
+    <div class="boot-bar"><i></i></div>
+  </div>
+</div>
+
+<!-- Map + atmosphere -->
+<div id="map" role="application" aria-label="Live transit map of Milwaukee"></div>
+<div id="vignette" aria-hidden="true"></div>
+<div id="grain" aria-hidden="true"></div>
+<div id="mapcursor" aria-hidden="true"></div>
+
+<!-- Top chrome -->
 <header id="topbar">
   <div class="brand">
-    <span class="wordmark">HOPSCOTCH</span>
-    <span class="tagline">Helen's transit, made useful</span>
+    <span class="brand-mark"><i></i></span>
+    <span class="brand-word">HOPSCOTCH</span>
+    <span class="brand-sub">MKE · LIVE TRANSIT</span>
   </div>
-  <div id="statusline" class="statusline" title="System status">&mdash;</div>
+  <button id="freshpill" class="glass" title="Feed status — tap for intel">
+    <span id="livedot" class="dot"></span>
+    <span class="fp-live">LIVE</span>
+    <span class="fp-sep">·</span>
+    <span id="vehcount" class="mono">—</span><span class="fp-unit">vehicles</span>
+    <span class="fp-sep">·</span>
+    <span class="fp-unit">updated</span>
+    <span id="age" class="mono">—</span>
+  </button>
+  <div class="top-actions glass">
+    <button id="tg-bus" class="tog on" title="MCTS buses"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="14" rx="3"/><circle cx="8.5" cy="19.5" r="1.6"/><circle cx="15.5" cy="19.5" r="1.6"/><path d="M4 10h16"/></svg><span>Bus</span></button>
+    <button id="tg-hop" class="tog on" title="The Hop streetcar"><svg viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="14" rx="3"/><circle cx="9" cy="19.5" r="1.5"/><circle cx="15" cy="19.5" r="1.5"/><path d="M12 3v14"/></svg><span>Hop</span></button>
+    <button id="btn-search" class="tog" title="Search stops ( / )"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5 20 20"/></svg></button>
+  </div>
 </header>
 
-<nav id="navstrip">
-  <button class="navbtn active" data-view="plan"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 17h16M6 17V9l6-4 6 4v8M9 13h6"/></svg><span>Today</span></button>
-  <button class="navbtn" data-view="map"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 6 5-2 6 2 5-2v14l-5 2-6-2-5 2V6Zm5-2v14m6-12v14"/></svg><span>Map</span></button>
-  <button class="navbtn" data-view="routes"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14"/></svg><span>Explore</span></button>
-  <button class="navbtn" data-view="alerts"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7ZM10 20h4"/></svg><span>Alerts</span><span id="alertbadge" class="badge" hidden></span></button>
-  <button class="navbtn" data-view="yesterday"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 18V9m6 9V5m6 13v-6m4 6H2"/></svg><span>Reliability</span></button>
-</nav>
+<!-- Disruption banner -->
+<div id="alertbanner" class="glass" hidden>
+  <span class="ab-edge"></span>
+  <svg viewBox="0 0 24 24" class="ab-ico"><path d="M12 3 2.5 20h19L12 3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9.5v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.2" fill="currentColor"/></svg>
+  <span id="alertbanner-text"></span>
+  <button id="alertbanner-more">details</button>
+</div>
 
-<main>
-  <section id="view-map" class="view">
-    <div id="mapwrap">
-      <div id="map"></div>
-      <div id="mapcontrols">
-        <div class="map-panel">
-          <div class="home-control"><strong>Near Helen</strong><span>Wisconsin &amp; Plankinton</span></div>
-          <div class="mode-tabs" role="group" aria-label="Choose transit to show">
-            <button class="mode-tab active" data-layer-mode="all">All live</button>
-            <button class="mode-tab bus-tab" data-layer-mode="bus">Buses</button>
-            <button class="mode-tab hop-tab" data-layer-mode="hop">The Hop</button>
-          </div>
-          <div class="map-quick" id="mapquick" aria-label="Helen's regular trips"></div>
-        </div>
-        <div class="ctl-row">
-          <select id="routepick" aria-label="Show a route from Helen's area">
-            <option value="">Choose one route&hellip;</option>
-          </select>
-        </div>
-        <div class="ctl-row toggles">
-          <input type="checkbox" id="tg-bus" checked hidden>
-          <input type="checkbox" id="tg-hop" checked hidden>
-          <label><input type="checkbox" id="tg-mine"> Starred routes only</label>
+<!-- Search -->
+<div id="searchbox" class="glass" hidden>
+  <input id="searchinput" type="text" placeholder="Search stops or routes…" autocomplete="off" spellcheck="false">
+  <div id="searchresults"></div>
+</div>
+
+<!-- Main panel : departures / trips / intel -->
+<aside id="panel" class="glass">
+  <div id="sheetgrab" aria-hidden="true"><i></i></div>
+  <nav id="tabs" role="tablist">
+    <button role="tab" data-tab="departures" class="on">Departures</button>
+    <button role="tab" data-tab="trips">My trips</button>
+    <button role="tab" data-tab="intel">Intel</button>
+  </nav>
+
+  <section id="tab-departures" class="tabpane on" role="tabpanel">
+    <div id="hero">
+      <div class="eyebrow">Next out · <span id="hero-stop">Helen's corner</span></div>
+      <div id="hero-body">
+        <div class="hero-count"><span id="hero-time" class="mono">--:--</span><span id="hero-unit"></span></div>
+        <div class="hero-meta">
+          <span id="hero-route" class="rbullet"></span>
+          <div><div id="hero-dest"></div><div id="hero-sub" class="mut"></div></div>
         </div>
       </div>
-      <div id="livelabel"><span id="livedot"></span><span id="liveage">connecting live locations&hellip;</span></div>
-      <div id="mapkey"><span class="key-bus">14</span> live MCTS bus <span class="key-hop">H</span> live Hop streetcar</div>
-      <div id="refreshnote">Live vehicle locations. We check for an update every minute, or every 20 seconds while a route is open.</div>
-      <div id="hopbanner" hidden>Hop live positions are down - showing schedule times only.</div>
+      <div id="hero-rail" class="timerail"><i></i></div>
     </div>
-    <div id="sheet" hidden>
-      <button id="sheetclose" aria-label="Close">&times;</button>
-      <div id="sheetbody"></div>
-    </div>
+    <div class="eyebrow rowhead"><span>Board · near Helen</span><span id="board-legend" class="mut"><i class="dot live"></i>live <i class="dot sched"></i>scheduled</span></div>
+    <div id="board"></div>
   </section>
 
-  <section id="view-routes" class="view">
-    <p class="viewnote">Start with the lines near Helen. Each one says the street it follows and where it takes you.</p>
-    <table class="ledger" id="routetable">
-      <thead><tr><th></th><th>Where it goes</th><th>Now</th><th>Delay</th><th></th></tr></thead>
-      <tbody></tbody>
-    </table>
+  <section id="tab-trips" class="tabpane" role="tabpanel">
+    <div class="eyebrow rowhead"><span>Helen's everyday trips</span></div>
+    <div id="trips"></div>
   </section>
 
-  <section id="view-plan" class="view active">
-    <div class="today-head">
-      <p class="eyebrow">From Helen's door</p>
-      <h1>Your next ride.<br>Right when you need it.</h1>
-      <p>Live departures for the places you go, with the one after it and a clear warning when service slips.</p>
-      <button class="btn hero-cta" onclick="switchView('map')"><span>Open live map</span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button>
-    </div>
-    <div id="hotroutes"></div>
-    <div class="alert-callout">
-      <div><p class="eyebrow">Cell alerts</p><strong>Get a heads-up, not a surprise.</strong><p>Choose a trip for close-bus, delay, and disruption alerts.</p></div>
-      <button class="btn secondary" data-open-alerts>Set alerts</button>
-    </div>
+  <section id="tab-intel" class="tabpane" role="tabpanel">
+    <div class="eyebrow rowhead"><span>Service alerts</span></div>
+    <div id="intel-alerts"></div>
+    <div class="eyebrow rowhead"><span>Ghost buses · yesterday</span><span class="mut">promised, never came</span></div>
+    <div id="intel-ghosts"></div>
+    <div class="eyebrow rowhead"><span>Reliability</span><span class="mut">last 7 days</span></div>
+    <div id="intel-rely"></div>
   </section>
+</aside>
 
-  <section id="view-alerts" class="view">
-    <div class="alert-setup">
-      <p class="eyebrow">Cell alerts</p>
-      <h1>Only alert me when it matters.</h1>
-      <p>Set the time you need to arrive. Hopscotch works backward to a leave-by time, then watches the right stop for a close bus, delay, or service change.</p>
-      <form id="alertform">
-        <label>Trip <select id="alerttrip" aria-label="Choose a trip"></select></label>
-        <label>Need to arrive by <input id="arriveby" type="time" required></label>
-        <div class="leave-plan" id="leaveplan" aria-live="polite"></div>
-        <fieldset class="days-fieldset"><legend>Repeat on</legend>
-          <div class="day-presets"><button type="button" data-day-preset="school">School days</button><button type="button" data-day-preset="every">Every day</button></div>
-          <div class="day-toggle-group" aria-label="Days to repeat"><label><input type="checkbox" name="day" value="Mon" checked> Mon</label><label><input type="checkbox" name="day" value="Tue" checked> Tue</label><label><input type="checkbox" name="day" value="Wed" checked> Wed</label><label><input type="checkbox" name="day" value="Thu" checked> Thu</label><label><input type="checkbox" name="day" value="Fri" checked> Fri</label><label><input type="checkbox" name="day" value="Sat"> Sat</label><label><input type="checkbox" name="day" value="Sun"> Sun</label></div>
-        </fieldset>
-        <label>Phone number <input id="alertphone" inputmode="tel" autocomplete="tel" placeholder="414 555 0123" required></label>
-        <label>Carrier <select id="alertcarrier" aria-label="Choose phone carrier"><option value="att">AT&amp;T</option><option value="tmobile">T-Mobile</option></select></label>
-        <fieldset><legend>Alert me for</legend><label><input type="checkbox" name="kind" value="approach" checked> Bus is 5 minutes from my stop</label><label><input type="checkbox" name="kind" value="delay" checked> Route is 8+ minutes late</label><label><input type="checkbox" name="kind" value="news" checked> Detours or no-service alerts</label></fieldset>
-        <button class="btn" type="submit">Save cell alerts</button>
-      </form>
-      <p id="alertsetupnote" class="setupnote">This is limited to the stop on your selected trip, not every bus in Milwaukee.</p>
-    </div>
-    <h2 class="secthead">Service alerts near your trips</h2>
-    <div id="alertlist"></div>
-    <h2 class="secthead">Ghost buses today</h2>
-    <p class="viewnote">Trips the schedule promised that never showed up.</p>
-    <table class="ledger" id="ghosttable">
-      <thead><tr><th>Route</th><th>Was due</th><th>Toward</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
+<!-- Trip progress rail -->
+<aside id="triprail" class="glass" hidden>
+  <button id="rail-close" title="Close (Esc)">✕</button>
+  <div class="rail-head">
+    <span id="rail-route" class="rbullet"></span>
+    <div><div id="rail-dest"></div><div id="rail-sub" class="mut mono"></div></div>
+  </div>
+  <div class="rail-counts">
+    <div><b id="rail-eta" class="mono">—</b><span>to your stop</span></div>
+    <div><b id="rail-left" class="mono">—</b><span>stops away</span></div>
+    <div><b id="rail-status">—</b><span>status</span></div>
+  </div>
+  <div id="rail-stops"></div>
+  <div class="rail-actions">
+    <button id="rail-track" class="btn primary">Follow this bus</button>
+    <button id="rail-notify" class="btn">Notify me</button>
+  </div>
+</aside>
 
-  <section id="view-yesterday" class="view">
-    <p class="viewnote">The collector keeps every snapshot. This card is built from yesterday's.</p>
-    <div id="summary"></div>
-  </section>
-</main>
+<!-- Sticky ETA pill while following -->
+<button id="etapill" class="glass" hidden>
+  <span class="dot live"></span>
+  <span id="etapill-route" class="rbullet sm"></span>
+  <span id="etapill-text" class="mono">—</span>
+  <span id="etapill-x">✕</span>
+</button>
 
-<footer>
-  <p>Live positions from MCTS and the Hop's public map feed, collected every half minute or so. Hop arrival times are estimates. Not affiliated with MCTS or the Hop.</p>
-</footer>
+<div id="coords" class="mono" aria-hidden="true">43.0387°N · 87.9112°W</div>
+<div id="toast" class="glass" hidden></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=12"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
