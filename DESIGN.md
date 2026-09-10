@@ -1,76 +1,68 @@
 # Hopscotch UI contract
 
 ## Direction
-Hopscotch is Milwaukee's live transit console: a full-bleed dark map with floating
-glass panels, built around the question "what leaves next from Helen's corner?"
-The visual language is an ops console, not a brochure — subordinate dark basemap,
-transit data as the brightest layer, continuous motion as the liveness signal.
-Dark theme is the default and only theme.
+Hopscotch is a Milwaukee transit authority departure system, in the lineage of
+SBB/Müller-Brockmann and Vignelli's NYCTA work: flat warm paper, one grotesque
+used with discipline, tabular mono for all times, hairline rules, zero
+decoration. Light mode only. Authority comes from the system, not styling.
+(Deliberately the opposite of the AI-slop starter pack: no gradients, no glow,
+no glassmorphism, no pulsing dots, no spring physics, no emoji, no em-dashes.)
 
-## Reference extraction
-Rebuilt Sep 2026 from a benchmark pass over MTA Live Subway Map (Work & Co),
-Transit App, TfL Go, Google Maps transit, Amtrak Track-a-Train, and indie
-dashboards (mta-subway-feed, hatsmagee/bus-tracker). Research notes live outside
-this repo; the stealable patterns implemented here are listed under Motion.
+## Tokens
+- Paper `#f6f4ef`, panel `#fdfcf8`, ink `#16130e`, muted `#6f6a5e`,
+  hairline `#e2ddd1` / `#cfc8b8`. No shadows anywhere, ever.
+- Radius: 2px max on everything. Pills do not exist.
+- Swiss red `#eb0000`: reserved for live/disruption/selection states only.
+- Status colors are operational, never decorative: green on-time, amber delayed,
+  red disrupted.
+- Route colors come from GTFS `route_color` and mean line identity only.
+- Type: Archivo (400-800, tight headlines, tracked uppercase micro-labels) +
+  IBM Plex Mono with `tabular-nums` for every time, countdown, and metric.
 
-### Colors by job
-- Canvas: `#05080e`, near-black with a blue undertone, behind everything.
-- Panel glass: `rgba(11,17,28,.72)` + 16px blur + 1px `rgba(160,195,240,.14)` border.
-- Ink: `#e9eff9`. Muted: `#8f9bb0`. Dim: `#5d6a82`.
-- Accents come from GTFS `route_color` — the network colors the UI, not a brand gradient.
-- Signal colors: `#ffb224` boarding/attention, `#ff5d5d` disruption, `#3ddc97` live/on-time, `#2f7cf6` interactive blue.
+## Layout
+- Masthead: 54px bar. Wordmark left, date + feed status as plain mono text
+  right (`FEED LIVE · 212 VEHICLES · 12S AGO`), text buttons (SEARCH / BUS / HOP).
+  No pills, no pulse dots. Stale feed turns the status text red.
+- Board (left column, 400px): hero "next out" as an inverted black block with
+  huge mono countdown; at ≤30s it inverts to red (BOARDING). Below: text tabs
+  with 2px underline indicators. Departures are flat rows with hairline
+  dividers: route square, destination, tabular times (live bright, scheduled
+  dimmed). Row click isolates the route.
+- Map: CARTO Positron (light). Route lines flat, 3.5px, isolated route full
+  opacity / others 30%. Disrupted routes dashed. Vehicles are flat squares in
+  route colors with white route numbers and a small bearing tick; stale
+  vehicles go hollow at 55%; selected gets a 3px red outline. Stops are 7px
+  black squares at zoom ≥ 13.5.
+- Disruptions: flat red band under the masthead, white mono text. No stripes.
+- Trip rail: flat panel, square station nodes on a hairline, red "here" node.
+- Mobile (≤860px): board becomes a bottom sheet (peek 168px / half / full)
+  with drag handle; masthead condenses; rows ≥56px; rail becomes a bottom sheet.
 
-### Type
-- UI: Space Grotesk (400/500/600/700).
-- Times, countdowns, data: IBM Plex Mono with `tabular-nums`.
-- Live-vs-scheduled is a brightness language: live countdowns are bright with a
-  pulsing dot; scheduled times are dimmed/dashed. Never render scheduled with
-  live confidence.
+## Motion (functional only)
+- Vehicles interpolate along GTFS shapes between 30s polls: dead reckoning by
+  reported speed + exponential ease to the new fix (~1s). Stopped vehicles hold.
+- Countdowns tick in place every second (tabular numerals, no layout shift).
+- Data refresh flashes updated rows once (warm 450ms); list is never rebuilt
+  on a tick.
+- Sheet/panel transitions: 200ms ease-out. No springs, no stagger, no boot
+  choreography: instant shell with static skeleton rows.
 
-### Layout
-- Desktop: full-bleed map; top bar (brand + freshness pill + layer toggles);
-  left floating panel with tabs (Departures / My trips / Intel); right trip rail
-  on vehicle/stop selection; disruption banner top-center; sticky ETA pill while
-  following a vehicle. Never cover the map's center with chrome.
-- Mobile: the panel becomes a bottom sheet with three detents
-  (peek 148px / half / full), drag handle + tap to cycle.
+## States
+- Loading: static skeleton rows. Error: `FEED DOWN · LAST UPDATE HH:MM:SS ·
+  RETRYING` band with retry. Empty: plain "No departures…" lines. Edge: ghost
+  buses and reliability in Intel. Permanent updated stamp in the masthead.
 
-### Components
-- Freshness pill: `● LIVE · N vehicles · updated Ns ago`, ticking every second;
-  dot green <90s, amber <5min, red beyond. Cheapest trust-builder in the product.
-- Hero "Next out": the single soonest departure across Helen's anchor stops;
-  under 2 min the countdown becomes a seconds ticker (`1:34`); at ≤30s the card
-  inverts to a BOARD state. A draining time-rail sits under it.
-- Board rows: one per route near Helen, grouped by direction → destination
-  (TfL pattern). Next 3 departures as chips — nearest filled, rest outlined,
-  scheduled dashed-dim. Delay chip per route (`on time` / `+N min`).
-- Vehicle markers: route-colored pins with direction chevrons; selected vehicle
-  gets an expanding pulse ring; stale vehicles (>2 min no GPS) ghost to 30%
-  with a dashed ring and stay on the map — never delete, deletion reads as a bug.
-- Route isolation: click a board row to isolate — its line goes full brightness,
-  everything else dims to ~12%. `1–9` hotkeys, `Esc` clears, `/` searches stops.
-- Trip rail: vertical station progress with glowing position node, per-stop
-  countdowns, stops-away + ETA counters, follow mode with damped camera and a
-  sticky ETA pill.
-- Disrupted routes render dashed on the map with a slim banner; alerts,
-  ghost buses, and reliability bars live in the Intel tab.
-
-## Motion
-- One rAF loop: vehicles advance along GTFS shape polylines by dead reckoning
-  (reported speed) between 30s polls; new data retargets with an exponential
-  ease (~1s), never a snap. Stopped vehicles hold — no drift, no reversing.
-- Boarding transitions: row background fill expands, row promotes to top.
-  Data refreshes update values in place with a 500ms value-flash; the list is
-  never fully re-rendered on a tick.
-- Boot: 650ms choreography — overlay fades, top bar drops in, panel slides up,
-  vehicles pop with stagger.
-- Springs (`cubic-bezier(0.34,1.45,0.44,1)`) for panels/sheets; 150–250ms
-  ease-out micro-interactions; `prefers-reduced-motion` disables smoothing and
-  choreography.
+## Copy
+- The data is the headline ("14 · 3 min"). No marketing copy, no em-dashes
+  (middots/colons), plain verbs (Refresh, Filter, Follow).
 
 ## Data contract (do not break)
-- `data/static.json`, `data/tt-*.json`, `data/hotroutes.json` ship with the page (main branch).
-- `data/live.json` + `data/summary.json` are read from the `data` branch via
-  raw.githubusercontent.com — the collector owns them; the page never touches feeds.
-- Vehicle: `{id, trip, route, lat, lon, bearing, speed, delay, next:[{stop, at, in, name}]}`.
-- Stop predictions: `stops[stopId] = [[route, in_sec, at_epoch, trip_id], ...]`.
+- `data/static.json` (routes, stops as `[sid,name,lat,lon]`, `stop_routes`,
+  `calendar`, `shapes` as `{rid:{dir:pts}}`, `hop`, `tindex`), `data/tt-*.json`
+  (`{rid:{stops,headsign,services,trips}}`, trip =
+  `[tripId, svcIdx, patternKey, deltas]`, deltas[0] = sec since central midnight,
+  deltas[i] = sec since previous stop), `data/hotroutes.json` ship with the page.
+- `data/live.json` + `data/summary.json` from the `data` branch via
+  raw.githubusercontent.com. Vehicle:
+  `{id, trip, route, lat, lon, bearing, speed, delay, next:[{stop, at, in, name}]}`.
+  Stop predictions: `stops[stopId] = [[route, in_sec, at_epoch, trip_id], ...]`.
