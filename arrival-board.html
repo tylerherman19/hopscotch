@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hopscotch - MKE live transit</title>
+<meta name="description" content="Every Milwaukee bus and Hop streetcar live on one map, with arrival predictions.">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75,500;75,700;100,400;100,600;100,800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/tylerherman19/hopscotch@pre-ui-rebuild-2026-09-10/styles.css"><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet"><style>
+/* Direction 2: The Split-Flap Board. Object: transit arrival board. Accent: amber signal lamp. */
+:root{--paper:#ebece7;--ink:#171b1a;--muted:#606762;--rule:#c9ccc7;--accent:#c96b00;--good:#2b7050;--warn:#a95f00;--bad:#b12731;--unk:#777d79;--mono:"IBM Plex Mono",ui-monospace,monospace;--press:130ms;--enter:220ms;--ease-out:cubic-bezier(.23,1,.32,1)}body{background:var(--paper);color:var(--ink);font-family:"Archivo",system-ui,sans-serif}button,select,input{border-radius:0;transition:transform var(--press) var(--ease-out),color 180ms,background 180ms}button:active{transform:translateY(1px)}button:focus-visible{outline:3px solid rgba(201,107,0,.28);outline-offset:2px}
+#topbar{align-items:center;padding:12px 16px;background:#151918;color:#f7f5ea;border:0}.wordmark{font-size:1rem;letter-spacing:.18em}.tagline{color:#aeb6af;font-family:var(--mono);font-size:.62rem}.statusline{border:0;color:#ffba62;font-family:var(--mono);font-size:.68rem;padding:0}
+#navstrip{order:3;position:sticky;bottom:0;top:auto;border:0;background:#151918}.navbtn{min-height:68px;border:0!important;background:#151918!important;color:#aeb6af;text-transform:none;letter-spacing:.02em;font-size:.66rem}.navbtn.active{color:#ffb657}.navbtn svg{display:block;width:18px;height:18px;margin:0 auto 4px;fill:none;stroke:currentColor;stroke-width:1.8}main{order:2}footer{order:2;background:#151918;color:#aeb6af;border:0}
+.today-head{padding:28px 18px 22px;background:#e8eae5;border-bottom:1px solid var(--ink)}.eyebrow{color:var(--accent);font-family:var(--mono);font-size:.68rem;letter-spacing:.12em}.today-head h1{font-family:var(--mono);font-size:2rem;line-height:1.05;letter-spacing:-.04em;text-transform:uppercase;margin:10px 0}.today-head p:last-child{color:var(--muted);font-size:.88rem}.today-head:after{content:"PLATFORM 01  ·  LIVE";display:block;margin-top:18px;padding-top:12px;border-top:1px solid var(--rule);color:var(--muted);font:700 .65rem/1 var(--mono);letter-spacing:.12em}
+#hotroutes{padding:0;background:#151918;gap:1px}.trip-card{position:relative;border:0;border-radius:0;box-shadow:none;background:#f8f6ec;padding:20px 18px 20px 62px}.trip-card:before{content:counter(item,decimal-leading-zero);counter-increment:item;position:absolute;left:18px;top:22px;color:var(--accent);font:700 .75rem/1 var(--mono)}#hotroutes{counter-reset:item}.trip-card.hop{border:0}.trip-top{font-family:var(--mono)}.mode{border-radius:0;background:none!important;color:var(--accent)!important;padding:0}.trip-route{font-size:.7rem}.trip-card h2{font-family:var(--mono);font-size:1.12rem;letter-spacing:-.025em;text-transform:uppercase}.next-summary{margin:14px 0 10px;padding:12px 0;border:0;border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);background:none!important}.next-label{font-family:var(--mono)}.next-summary strong{font:700 1.65rem/1 var(--mono)}.next-minutes,.trip-card.hop .next-minutes{color:var(--accent)}.depart-line,.arrival-line{font-family:var(--mono)}.delaychip{border:0;padding:0;font-family:var(--mono)}.trip-stops b{color:var(--accent)}.textbtn{font-family:var(--mono);font-size:.74rem;color:var(--accent)}.alert-callout{margin:0;padding:24px 18px;background:#e8eae5;color:var(--ink);border-top:1px solid var(--ink)}.alert-callout .eyebrow{color:var(--accent)}.alert-callout p:last-child{color:var(--muted)}.alert-callout .btn{background:var(--accent)}
+@keyframes flip{from{opacity:0;transform:rotateX(-12deg)}to{opacity:1;transform:none}}.view.active #hotroutes>*{transform-origin:top;animation:flip var(--enter) var(--ease-out) both}.view.active #hotroutes>*:nth-child(2){animation-delay:45ms}.view.active #hotroutes>*:nth-child(3){animation-delay:90ms}@media(hover:hover) and (pointer:fine){button:hover{color:var(--accent)}}@media(max-width:600px){.tagline{display:none}.trip-live{max-width:55%}footer{padding-bottom:80px}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition-duration:.01ms!important}button:active{transform:none}}
+
+</style>
+</head>
+<body class="preview-arrival-board">
+
+<header id="topbar">
+  <div class="brand">
+    <span class="wordmark">HOPSCOTCH</span>
+    <span class="tagline">LIVE ARRIVALS · DOWNTOWN MILWAUKEE</span>
+  </div>
+  <div id="statusline" class="statusline" title="System status">&mdash;</div>
+</header>
+
+<nav id="navstrip">
+  <button class="navbtn active" data-view="plan"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 17h16M6 17V9l6-4 6 4v8M9 13h6"/></svg><span>Today</span></button>
+  <button class="navbtn" data-view="map"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 6 5-2 6 2 5-2v14l-5 2-6-2-5 2V6Zm5-2v14m6-12v14"/></svg><span>Map</span></button>
+  <button class="navbtn" data-view="routes"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14"/></svg><span>Explore</span></button>
+  <button class="navbtn" data-view="alerts"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7ZM10 20h4"/></svg><span>Alerts</span><span id="alertbadge" class="badge" hidden></span></button>
+  <button class="navbtn" data-view="yesterday"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 18V9m6 9V5m6 13v-6m4 6H2"/></svg><span>Reliability</span></button>
+</nav>
+
+<main>
+  <section id="view-map" class="view">
+    <div id="mapwrap">
+      <div id="map"></div>
+      <div id="mapcontrols">
+        <div class="map-panel">
+          <div class="home-control"><strong>Near Helen</strong><span>Wisconsin &amp; Plankinton</span></div>
+          <div class="mode-tabs" role="group" aria-label="Choose transit to show">
+            <button class="mode-tab active" data-layer-mode="all">All live</button>
+            <button class="mode-tab bus-tab" data-layer-mode="bus">Buses</button>
+            <button class="mode-tab hop-tab" data-layer-mode="hop">The Hop</button>
+          </div>
+          <div class="map-quick" id="mapquick" aria-label="Helen's regular trips"></div>
+        </div>
+        <div class="ctl-row">
+          <select id="routepick" aria-label="Show a route from Helen's area">
+            <option value="">Choose one route&hellip;</option>
+          </select>
+        </div>
+        <div class="ctl-row toggles">
+          <input type="checkbox" id="tg-bus" checked hidden>
+          <input type="checkbox" id="tg-hop" checked hidden>
+          <label><input type="checkbox" id="tg-mine"> Starred routes only</label>
+        </div>
+      </div>
+      <div id="livelabel"><span id="livedot"></span><span id="liveage">connecting live locations&hellip;</span></div>
+      <div id="mapkey"><span class="key-bus">14</span> live MCTS bus <span class="key-hop">H</span> live Hop streetcar</div>
+      <div id="refreshnote">Live vehicle locations. We check for an update every minute, or every 20 seconds while a route is open.</div>
+      <div id="hopbanner" hidden>Hop live positions are down - showing schedule times only.</div>
+    </div>
+    <div id="sheet" hidden>
+      <button id="sheetclose" aria-label="Close">&times;</button>
+      <div id="sheetbody"></div>
+    </div>
+  </section>
+
+  <section id="view-routes" class="view">
+    <p class="viewnote">Start with the lines near Helen. Each one says the street it follows and where it takes you.</p>
+    <table class="ledger" id="routetable">
+      <thead><tr><th></th><th>Where it goes</th><th>Now</th><th>Delay</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="view-plan" class="view active">
+    <div class="today-head">
+      <p class="eyebrow">Now calling</p>
+      <h1>The board knows what is next.</h1>
+      <p>Live departures for the places you go, with the one after it and a clear warning when the service is slipping.</p>
+    </div>
+    <div id="hotroutes"></div>
+    <div class="alert-callout">
+      <div><p class="eyebrow">Cell alerts</p><strong>Get a heads-up, not a surprise.</strong><p>Choose a trip for close-bus, delay, and disruption alerts.</p></div>
+      <button class="btn secondary" data-open-alerts>Set alerts</button>
+    </div>
+  </section>
+
+  <section id="view-alerts" class="view">
+    <div class="alert-setup">
+      <p class="eyebrow">Cell alerts</p>
+      <h1>Only alert me when it matters.</h1>
+      <p>Set the time you need to arrive. Hopscotch works backward to a leave-by time, then watches the right stop for a close bus, delay, or service change.</p>
+      <form id="alertform">
+        <label>Trip <select id="alerttrip" aria-label="Choose a trip"></select></label>
+        <label>Need to arrive by <input id="arriveby" type="time" required></label>
+        <div class="leave-plan" id="leaveplan" aria-live="polite"></div>
+        <fieldset class="days-fieldset"><legend>Repeat on</legend>
+          <div class="day-presets"><button type="button" data-day-preset="school">School days</button><button type="button" data-day-preset="every">Every day</button></div>
+          <div class="day-toggle-group" aria-label="Days to repeat"><label><input type="checkbox" name="day" value="Mon" checked> Mon</label><label><input type="checkbox" name="day" value="Tue" checked> Tue</label><label><input type="checkbox" name="day" value="Wed" checked> Wed</label><label><input type="checkbox" name="day" value="Thu" checked> Thu</label><label><input type="checkbox" name="day" value="Fri" checked> Fri</label><label><input type="checkbox" name="day" value="Sat"> Sat</label><label><input type="checkbox" name="day" value="Sun"> Sun</label></div>
+        </fieldset>
+        <label>Phone number <input id="alertphone" inputmode="tel" autocomplete="tel" placeholder="414 555 0123" required></label>
+        <label>Carrier <select id="alertcarrier" aria-label="Choose phone carrier"><option value="att">AT&amp;T</option><option value="tmobile">T-Mobile</option></select></label>
+        <fieldset><legend>Alert me for</legend><label><input type="checkbox" name="kind" value="approach" checked> Bus is 5 minutes from my stop</label><label><input type="checkbox" name="kind" value="delay" checked> Route is 8+ minutes late</label><label><input type="checkbox" name="kind" value="news" checked> Detours or no-service alerts</label></fieldset>
+        <button class="btn" type="submit">Save cell alerts</button>
+      </form>
+      <p id="alertsetupnote" class="setupnote">This is limited to the stop on your selected trip, not every bus in Milwaukee.</p>
+    </div>
+    <h2 class="secthead">Service alerts near your trips</h2>
+    <div id="alertlist"></div>
+    <h2 class="secthead">Ghost buses today</h2>
+    <p class="viewnote">Trips the schedule promised that never showed up.</p>
+    <table class="ledger" id="ghosttable">
+      <thead><tr><th>Route</th><th>Was due</th><th>Toward</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="view-yesterday" class="view">
+    <p class="viewnote">The collector keeps every snapshot. This card is built from yesterday's.</p>
+    <div id="summary"></div>
+  </section>
+</main>
+
+<footer>
+  <p>Live positions from MCTS and the Hop's public map feed, collected every half minute or so. Hop arrival times are estimates. Not affiliated with MCTS or the Hop.</p>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const previewFetch = window.fetch.bind(window);
+window.fetch = (input, init) => {
+  const url = String(input);
+  if (url === "data/static.json") return previewFetch("https://tylerherman19.github.io/hopscotch/data/static.json", init);
+  if (url === "data/hotroutes.json") return previewFetch("https://tylerherman19.github.io/hopscotch/data/hotroutes.json", init);
+  return previewFetch(input, init);
+};
+</script>
+<script src="https://cdn.jsdelivr.net/gh/tylerherman19/hopscotch@pre-ui-rebuild-2026-09-10/app.js"></script>
+</body>
+</html>
