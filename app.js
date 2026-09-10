@@ -24,6 +24,12 @@ const S = {
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fetchJson = async (u) => (await fetch(u, { cache: "no-store" })).json();
+/* storage that never throws: a blocked/unavailable store must not kill boot */
+const store = {
+  get(k, fb) { try { const v = localStorage.getItem(k); return v == null ? fb : v; } catch (e) { return fb; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+const storeJson = (k, fb) => { try { const v = JSON.parse(store.get(k, null)); return v == null ? fb : v; } catch (e) { return fb; } };
 
 /* central-time helpers */
 const ctFmt = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hour: "numeric", minute: "2-digit", hour12: true });
@@ -120,7 +126,7 @@ function activeServices() {
   return { has: (s) => typeof s === "string" && s.includes("_" + part) && s.includes(mon + "_") };
 }
 function nearRoutes() {
-  const pins = JSON.parse(localStorage.getItem("hop_pins") || "[]").filter((r) => S.routeById[r] && S.anchor[r]);
+  const pins = (storeJson("hop_pins", []) || []).filter((r) => S.routeById[r] && S.anchor[r]);
   const hot = (S.hot || []).flatMap((t) => t.legs.filter((l) => l.kind === "bus").flatMap((l) => l.routes)).filter((r) => S.routeById[r] && S.anchor[r]);
   return [...new Set([...hot, ...pins, "14", "30", "12", "23"])].filter((r) => S.routeById[r] && S.anchor[r]);
 }
@@ -641,9 +647,9 @@ function startFollow(id) {
   toast("Following. The map stays with your bus.");
 }
 function saveWatch(w) {
-  const all = JSON.parse(localStorage.getItem("hop_watches") || "[]").filter((x) => x.label !== w.label);
+  const all = (storeJson("hop_watches", []) || []).filter((x) => x.label !== w.label);
   all.push({ ...w, at: Date.now() });
-  localStorage.setItem("hop_watches", JSON.stringify(all));
+  store.set("hop_watches", JSON.stringify(all));
   toast("Watch saved on this device.");
 }
 function toast(msg) {
