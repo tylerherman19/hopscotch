@@ -1,61 +1,76 @@
 # Hopscotch UI contract
 
 ## Direction
-Hopscotch is Milwaukee's live departure card: the page is built around one oversized, glanceable departure slip that answers "what leaves next?" before anything else. The visual language borrows Ticketline's confident consumer-product hierarchy, open white space, bold condensed display type, restrained workhorse body type, and one obvious action, then translates the ticket object into a transit object through a route-line spine, live vehicle glyphs, and Milwaukee blue. It is light, civic, calm, and useful rather than dashboard-like. The single accent is MCTS blue. Archivo Black handles display copy and Archivo handles every working label.
+Hopscotch is Milwaukee's live transit console: a full-bleed dark map with floating
+glass panels, built around the question "what leaves next from Helen's corner?"
+The visual language is an ops console, not a brochure — subordinate dark basemap,
+transit data as the brightest layer, continuous motion as the liveness signal.
+Dark theme is the default and only theme.
 
 ## Reference extraction
-Source: Tyler's Ticketline screenshot, 1427 x 805.
+Rebuilt Sep 2026 from a benchmark pass over MTA Live Subway Map (Work & Co),
+Transit App, TfL Go, Google Maps transit, Amtrak Track-a-Train, and indie
+dashboards (mta-subway-feed, hatsmagee/bus-tracker). Research notes live outside
+this repo; the stealable patterns implemented here are listed under Motion.
 
 ### Colors by job
-- Canvas: `#F6F8FB`, cool near-white behind the product.
-- Surface: `#FFFFFF`, navigation, departure slips, controls.
-- Ink: `#10213D`, deep navy rather than black.
-- Muted: `#61708A`, supporting copy and utility labels.
-- Hairline: `#D8E0EC`, borders and section rules.
-- Accent: `#1769E0`, sampled/translated to Milwaukee transit blue for active states, links, live glyphs, and the primary action.
-- Accent-dark: `#0E4EAE`, pressed/focus state only.
-- Semantic status: `#287A52` on-time, `#A35C00` delayed, `#B4232F` disruption, `#7B879A` unknown. These communicate operational state and never decorate layout.
+- Canvas: `#05080e`, near-black with a blue undertone, behind everything.
+- Panel glass: `rgba(11,17,28,.72)` + 16px blur + 1px `rgba(160,195,240,.14)` border.
+- Ink: `#e9eff9`. Muted: `#8f9bb0`. Dim: `#5d6a82`.
+- Accents come from GTFS `route_color` — the network colors the UI, not a brand gradient.
+- Signal colors: `#ffb224` boarding/attention, `#ff5d5d` disruption, `#3ddc97` live/on-time, `#2f7cf6` interactive blue.
 
-### Type scale
-- 12px / 700 / +0.10em: eyebrow and compact labels.
-- 14px / 600 / +0.01em: controls and metadata.
-- 16px / 400 / 0: body.
-- 20px / 700 / -0.01em: card title.
-- 24px / 800 / -0.025em: section heading.
-- 32px / 800 / -0.035em: mobile hero.
-- 48px / 800 / -0.045em: desktop hero.
-- Display line-height 0.98-1.12; body line-height 1.5; body measure max 62ch.
+### Type
+- UI: Space Grotesk (400/500/600/700).
+- Times, countdowns, data: IBM Plex Mono with `tabular-nums`.
+- Live-vs-scheduled is a brightness language: live countdowns are bright with a
+  pulsing dot; scheduled times are dimmed/dashed. Never render scheduled with
+  live confidence.
 
-### Spacing
-4px base: `4, 8, 12, 16, 24, 32, 48, 64`.
-Mobile gutter 20px. Section spacing 48px. Component spacing 16-24px.
+### Layout
+- Desktop: full-bleed map; top bar (brand + freshness pill + layer toggles);
+  left floating panel with tabs (Departures / My trips / Intel); right trip rail
+  on vehicle/stop selection; disruption banner top-center; sticky ETA pill while
+  following a vehicle. Never cover the map's center with chrome.
+- Mobile: the panel becomes a bottom sheet with three detents
+  (peek 148px / half / full), drag handle + tap to cycle.
 
-### Radius policy
-Ticketline uses a controlled 6-8px radius on buttons and the featured product card. Hopscotch uses 8px on primary actions and select/input controls, 12px on the one featured departure slip and bottom sheet, and 4px on tiny vehicle glyphs. Tables, secondary groups, status labels, and ordinary sections stay square. No pills except truly circular map markers.
-
-### Structural observations
-1. Quiet top navigation leads into a large split hero with the product object as the visual anchor.
-2. One large display promise, one short supporting paragraph, one primary action.
-3. A hairline separates hero from the next task instead of a card stack.
-4. Small icon-and-label utilities are secondary; the eye reads headline, object, action, then proof.
-5. The product illustration is real and specific. For Hopscotch, live departure data itself is the illustration.
-
-## Component rules
-- The first departure card is the hero object. Later departures are lighter rows, never an equal-card grid.
-- The primary action is "Open live map". Secondary actions use text or hairline outlines.
-- Bottom navigation uses one SVG stroke family and labels. No emoji or text-symbol icons.
-- Hierarchy comes from surface shifts and 1px rules, never shadows, gradients, blur, or colored edge stripes.
-- Dense route tables use zebra rows.
-- Buttons cover rest, hover, focus-visible, active, disabled/working states and confess loading state.
+### Components
+- Freshness pill: `● LIVE · N vehicles · updated Ns ago`, ticking every second;
+  dot green <90s, amber <5min, red beyond. Cheapest trust-builder in the product.
+- Hero "Next out": the single soonest departure across Helen's anchor stops;
+  under 2 min the countdown becomes a seconds ticker (`1:34`); at ≤30s the card
+  inverts to a BOARD state. A draining time-rail sits under it.
+- Board rows: one per route near Helen, grouped by direction → destination
+  (TfL pattern). Next 3 departures as chips — nearest filled, rest outlined,
+  scheduled dashed-dim. Delay chip per route (`on time` / `+N min`).
+- Vehicle markers: route-colored pins with direction chevrons; selected vehicle
+  gets an expanding pulse ring; stale vehicles (>2 min no GPS) ghost to 30%
+  with a dashed ring and stay on the map — never delete, deletion reads as a bug.
+- Route isolation: click a board row to isolate — its line goes full brightness,
+  everything else dims to ~12%. `1–9` hotkeys, `Esc` clears, `/` searches stops.
+- Trip rail: vertical station progress with glowing position node, per-stop
+  countdowns, stops-away + ETA counters, follow mode with damped camera and a
+  sticky ETA pill.
+- Disrupted routes render dashed on the map with a slim banner; alerts,
+  ghost buses, and reliability bars live in the Intel tab.
 
 ## Motion
-- `--press: 140ms`, `--quick: 180ms`, `--enter: 240ms`.
-- `--ease-out: cubic-bezier(0.23,1,0.32,1)`; `--ease-in-out: cubic-bezier(0.77,0,0.175,1)`.
-- Active press scales to 0.97. View changes and departure reveals use opacity/translate only, under 300ms, staggered 50ms.
-- Hover motion is wrapped in `(hover:hover) and (pointer:fine)`.
-- `prefers-reduced-motion: reduce` removes transforms, animation, and smooth transitions.
+- One rAF loop: vehicles advance along GTFS shape polylines by dead reckoning
+  (reported speed) between 30s polls; new data retargets with an exponential
+  ease (~1s), never a snap. Stopped vehicles hold — no drift, no reversing.
+- Boarding transitions: row background fill expands, row promotes to top.
+  Data refreshes update values in place with a 500ms value-flash; the list is
+  never fully re-rendered on a tick.
+- Boot: 650ms choreography — overlay fades, top bar drops in, panel slides up,
+  vehicles pop with stagger.
+- Springs (`cubic-bezier(0.34,1.45,0.44,1)`) for panels/sheets; 150–250ms
+  ease-out micro-interactions; `prefers-reduced-motion` disables smoothing and
+  choreography.
 
-## Decisions
-- Keep all transit data, labels, actions, IDs, and JavaScript behavior intact.
-- Use live data as the product artwork instead of adding stock or decorative illustration.
-- Preserve route and delay colors only where they encode real data.
+## Data contract (do not break)
+- `data/static.json`, `data/tt-*.json`, `data/hotroutes.json` ship with the page (main branch).
+- `data/live.json` + `data/summary.json` are read from the `data` branch via
+  raw.githubusercontent.com — the collector owns them; the page never touches feeds.
+- Vehicle: `{id, trip, route, lat, lon, bearing, speed, delay, next:[{stop, at, in, name}]}`.
+- Stop predictions: `stops[stopId] = [[route, in_sec, at_epoch, trip_id], ...]`.
