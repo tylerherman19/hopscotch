@@ -3,139 +3,126 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Hopscotch — MKE live transit</title>
-<meta name="description" content="Milwaukee's live transit console: real-time MCTS buses and the Hop streetcar, departures from your corner, trip tracking.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a0f18'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%232f7cf6'/%3E%3Ccircle cx='16' cy='16' r='10.5' fill='none' stroke='%232f7cf6' stroke-opacity='.45' stroke-width='2'/%3E%3C/svg%3E">
+<title>Hopscotch · Milwaukee Transit</title>
+<meta name="description" content="Live Milwaukee departures from Wisconsin & Plankinton. What leaves next.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%2316130e'/><text x='16' y='22' font-family='monospace' font-size='16' fill='%23f6f4ef' text-anchor='middle'>H</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-<link href="styles.css" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<div id="app">
 
-<!-- Boot choreography overlay -->
-<div id="boot" aria-hidden="true">
-  <div class="boot-inner">
-    <div class="boot-mark"><span class="boot-dot"></span>HOPSCOTCH</div>
-    <div class="boot-sub">MKE LIVE TRANSIT</div>
-    <div class="boot-bar"><i></i></div>
+  <header id="mast">
+    <div class="mast-left">
+      <span class="wordmark">HOPSCOTCH</span>
+      <span class="mast-sub">Milwaukee transit · Wisconsin &amp; Plankinton</span>
+    </div>
+    <div class="mast-right mono">
+      <span id="mast-date">—</span>
+      <span class="sep">·</span>
+      <span id="feedstat">CONNECTING</span>
+    </div>
+    <div class="mast-actions">
+      <button id="btn-search" class="txtbtn" aria-label="Search routes and stops">SEARCH</button>
+      <button id="tg-bus" class="txtbtn on" aria-pressed="true">BUS</button>
+      <button id="tg-hop" class="txtbtn on" aria-pressed="true">HOP</button>
+    </div>
+  </header>
+
+  <div id="disrupt" hidden>
+    <span id="disrupt-text" class="mono"></span>
+    <button id="disrupt-more" class="txtbtn inv">DETAILS</button>
   </div>
-</div>
 
-<!-- Map + atmosphere -->
-<div id="map" role="application" aria-label="Live transit map of Milwaukee"></div>
-<div id="vignette" aria-hidden="true"></div>
-<div id="grain" aria-hidden="true"></div>
-<div id="mapcursor" aria-hidden="true"></div>
+  <main id="main">
+    <section id="board" aria-label="Departures">
+      <div id="sheetgrab" aria-hidden="true"><span></span></div>
 
-<!-- Top chrome -->
-<header id="topbar">
-  <div class="brand">
-    <span class="brand-mark"><i></i></span>
-    <span class="brand-word">HOPSCOTCH</span>
-    <span class="brand-sub">MKE · LIVE TRANSIT</span>
-  </div>
-  <button id="freshpill" class="glass" title="Feed status — tap for intel">
-    <span id="livedot" class="dot"></span>
-    <span class="fp-live">LIVE</span>
-    <span class="fp-sep">·</span>
-    <span id="vehcount" class="mono">—</span><span class="fp-unit">vehicles</span>
-    <span class="fp-sep">·</span>
-    <span class="fp-unit">updated</span>
-    <span id="age" class="mono">—</span>
-  </button>
-  <div class="top-actions glass">
-    <button id="tg-bus" class="tog on" title="MCTS buses"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="14" rx="3"/><circle cx="8.5" cy="19.5" r="1.6"/><circle cx="15.5" cy="19.5" r="1.6"/><path d="M4 10h16"/></svg><span>Bus</span></button>
-    <button id="tg-hop" class="tog on" title="The Hop streetcar"><svg viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="14" rx="3"/><circle cx="9" cy="19.5" r="1.5"/><circle cx="15" cy="19.5" r="1.5"/><path d="M12 3v14"/></svg><span>Hop</span></button>
-    <button id="btn-search" class="tog" title="Search stops ( / )"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5 20 20"/></svg></button>
-  </div>
-</header>
-
-<!-- Disruption banner -->
-<div id="alertbanner" class="glass" hidden>
-  <span class="ab-edge"></span>
-  <svg viewBox="0 0 24 24" class="ab-ico"><path d="M12 3 2.5 20h19L12 3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9.5v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.2" fill="currentColor"/></svg>
-  <span id="alertbanner-text"></span>
-  <button id="alertbanner-more">details</button>
-</div>
-
-<!-- Search -->
-<div id="searchbox" class="glass" hidden>
-  <input id="searchinput" type="text" placeholder="Search stops or routes…" autocomplete="off" spellcheck="false">
-  <div id="searchresults"></div>
-</div>
-
-<!-- Main panel : departures / trips / intel -->
-<aside id="panel" class="glass">
-  <div id="sheetgrab" aria-hidden="true"><i></i></div>
-  <nav id="tabs" role="tablist">
-    <button role="tab" data-tab="departures" class="on">Departures</button>
-    <button role="tab" data-tab="trips">My trips</button>
-    <button role="tab" data-tab="intel">Intel</button>
-  </nav>
-
-  <section id="tab-departures" class="tabpane on" role="tabpanel">
-    <div id="hero">
-      <div class="eyebrow">Next out · <span id="hero-stop">Helen's corner</span></div>
-      <div id="hero-body">
-        <div class="hero-count"><span id="hero-time" class="mono">--:--</span><span id="hero-unit"></span></div>
-        <div class="hero-meta">
-          <span id="hero-route" class="rbullet"></span>
-          <div><div id="hero-dest"></div><div id="hero-sub" class="mut"></div></div>
+      <div id="hero" aria-live="polite">
+        <div class="hero-top"><span class="microlabel">Next out · Wisconsin &amp; Plankinton</span><span id="hero-clock" class="mono"></span></div>
+        <div class="hero-mid">
+          <span id="hero-route" class="routesq"></span>
+          <span id="hero-dest">—</span>
+        </div>
+        <div class="hero-bot">
+          <span id="hero-count" class="mono">—</span>
+          <span id="hero-status" class="mono"></span>
         </div>
       </div>
-      <div id="hero-rail" class="timerail"><i></i></div>
-    </div>
-    <div class="eyebrow rowhead"><span>Board · near Helen</span><span id="board-legend" class="mut"><i class="dot live"></i>live <i class="dot sched"></i>scheduled</span></div>
-    <div id="board"></div>
-  </section>
 
-  <section id="tab-trips" class="tabpane" role="tabpanel">
-    <div class="eyebrow rowhead"><span>Helen's everyday trips</span></div>
-    <div id="trips"></div>
-  </section>
+      <nav id="tabs" aria-label="Sections">
+        <button data-tab="departures" class="on">Departures</button>
+        <button data-tab="trips">My trips</button>
+        <button data-tab="intel">Intel</button>
+      </nav>
 
-  <section id="tab-intel" class="tabpane" role="tabpanel">
-    <div class="eyebrow rowhead"><span>Service alerts</span></div>
-    <div id="intel-alerts"></div>
-    <div class="eyebrow rowhead"><span>Ghost buses · yesterday</span><span class="mut">promised, never came</span></div>
-    <div id="intel-ghosts"></div>
-    <div class="eyebrow rowhead"><span>Reliability</span><span class="mut">last 7 days</span></div>
-    <div id="intel-rely"></div>
-  </section>
-</aside>
+      <div id="tab-departures" class="tabpane on">
+        <div id="board-error" hidden>
+          <span class="mono" id="board-error-text">FEED DOWN</span>
+          <button id="board-retry" class="txtbtn">RETRY</button>
+        </div>
+        <div id="departboard"></div>
+      </div>
 
-<!-- Trip progress rail -->
-<aside id="triprail" class="glass" hidden>
-  <button id="rail-close" title="Close (Esc)">✕</button>
-  <div class="rail-head">
-    <span id="rail-route" class="rbullet"></span>
-    <div><div id="rail-dest"></div><div id="rail-sub" class="mut mono"></div></div>
-  </div>
-  <div class="rail-counts">
-    <div><b id="rail-eta" class="mono">—</b><span>to your stop</span></div>
-    <div><b id="rail-left" class="mono">—</b><span>stops away</span></div>
-    <div><b id="rail-status">—</b><span>status</span></div>
-  </div>
-  <div id="rail-stops"></div>
-  <div class="rail-actions">
-    <button id="rail-track" class="btn primary">Follow this bus</button>
-    <button id="rail-notify" class="btn">Notify me</button>
-  </div>
-</aside>
+      <div id="tab-trips" class="tabpane">
+        <p class="pane-note">Helen's everyday routes. Times are live where the feed reports them.</p>
+        <div id="trips"></div>
+      </div>
 
-<!-- Sticky ETA pill while following -->
-<button id="etapill" class="glass" hidden>
-  <span class="dot live"></span>
-  <span id="etapill-route" class="rbullet sm"></span>
-  <span id="etapill-text" class="mono">—</span>
-  <span id="etapill-x">✕</span>
-</button>
+      <div id="tab-intel" class="tabpane">
+        <h3 class="sech">Service alerts</h3>
+        <div id="intel-alerts"></div>
+        <h3 class="sech">Ghost buses <span class="sech-sub">scheduled yesterday, never showed</span></h3>
+        <div id="intel-ghosts"></div>
+        <h3 class="sech">Reliability <span class="sech-sub">share of checks under 3 min late</span></h3>
+        <div id="intel-rely"></div>
+      </div>
+    </section>
 
-<div id="coords" class="mono" aria-hidden="true">43.0387°N · 87.9112°W</div>
-<div id="toast" class="glass" hidden></div>
+    <section id="mapwrap">
+      <div id="map" aria-label="Live transit map"></div>
 
+      <div id="searchbox" hidden>
+        <input id="searchinput" type="text" placeholder="Route number or stop name" autocomplete="off" aria-label="Search routes and stops">
+        <div id="searchresults"></div>
+      </div>
+
+      <aside id="rail" hidden aria-label="Trip detail">
+        <div class="rail-head">
+          <span id="rail-route" class="routesq"></span>
+          <div class="rail-titles">
+            <div id="rail-dest">—</div>
+            <div id="rail-sub" class="mono">—</div>
+          </div>
+          <button id="rail-close" class="txtbtn" aria-label="Close">CLOSE</button>
+        </div>
+        <div class="rail-counts mono">
+          <div><span class="microlabel">To your stop</span><b id="rail-eta">—</b></div>
+          <div><span class="microlabel">Stops away</span><b id="rail-left">—</b></div>
+          <div><span class="microlabel">Status</span><b id="rail-status">—</b></div>
+        </div>
+        <div id="rail-stops"></div>
+        <div class="rail-actions">
+          <button id="rail-track" class="btn">Follow this bus</button>
+          <button id="rail-notify" class="btn ghost">Notify me</button>
+        </div>
+      </aside>
+
+      <button id="etapill" hidden>
+        <span id="etapill-route" class="routesq sm"></span>
+        <span id="etapill-text" class="mono">—</span>
+        <span id="etapill-x" aria-label="Stop following">×</span>
+      </button>
+
+      <div id="coords" class="mono"></div>
+    </section>
+  </main>
+
+  <div id="toast" role="status"></div>
+</div>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="app.js"></script>
 </body>
