@@ -1,129 +1,309 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Hopscotch · Milwaukee Transit</title>
-<meta name="description" content="Live Milwaukee departures from Wisconsin & Plankinton. What leaves next.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%2316130e'/><text x='16' y='22' font-family='monospace' font-size='16' fill='%23f6f4ef' text-anchor='middle'>H</text></svg>">
+<title>Hopscotch · Milwaukee, live</title>
+<meta name="description" content="Helen's Milwaukee buses, drawn live. School and the lake up top, the whole system one tap away.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23efe9dc'/><text x='16' y='23' font-family='cursive' font-size='20' fill='%233a352c' text-anchor='middle'>H</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#efe9dc; --card:#f4efe3; --ink:#3a352c; --muted:#8a8172;
+  --hair:#ddd5c2; --red:#c84b3c;
+  --ease:cubic-bezier(.2,.7,.2,1); --settle:cubic-bezier(.16,1,.3,1);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.frozen *,.frozen *:before,.frozen *:after{transition:none!important;animation:none!important}
+html{background:var(--paper)}
+body{background:var(--paper);color:var(--ink);
+  font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+#grain{position:fixed;inset:0;pointer-events:none;z-index:60;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px 46px}
+
+/* masthead hero */
+header{padding:28px 0 2px;text-align:center}
+#sketch{width:230px;height:90px;margin:0 auto;display:block}
+#sketch path,#sketch circle{fill:none;stroke:var(--ink);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+h1{font-family:Caveat,cursive;font-weight:700;font-size:48px;line-height:1;margin-top:2px}
+.sub{font-size:10px;letter-spacing:.18em;color:var(--muted);margin-top:6px}
+#status{text-align:center;font-size:11px;color:var(--muted);margin:12px 0 4px;min-height:14px}
+#status b{color:var(--ink)}
+#bigstats{display:flex;justify-content:center;gap:34px;margin:10px 0 4px}
+#bigstats .st{text-align:center}
+#bigstats .n{font-size:30px;font-weight:500}
+#bigstats .l{font-size:9px;letter-spacing:.16em;color:var(--muted)}
+
+/* nav */
+#nav{display:flex;justify-content:center;gap:26px;margin:18px 0 2px}
+#nav a{font-size:10px;letter-spacing:.14em;color:var(--muted);text-decoration:none;
+  padding:4px 2px;position:relative;transition:color 240ms var(--ease)}
+#nav a.here{color:var(--ink)}
+#nav a.here:after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;
+  background:var(--red);border-radius:2px;transform:scaleX(1);transform-origin:left;
+  animation:under 620ms var(--settle) both}
+@keyframes under{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+#nav a:active{opacity:.5}
+
+/* section markers */
+.sect{display:flex;align-items:center;gap:12px;margin:26px 2px 4px}
+.sect .lab{font-family:Caveat,cursive;font-weight:700;font-size:31px;line-height:1}
+.sect .note{font-size:9px;letter-spacing:.12em;color:var(--muted);flex:1;text-align:right}
+.sect svg{flex:0 0 auto;display:block}
+.sect svg path{fill:none;stroke:var(--ink);stroke-width:2;stroke-linecap:round;opacity:.55}
+
+/* her cards */
+.her{background:var(--card);border:1.5px solid var(--ink);margin-top:16px;padding:16px 16px 18px;
+  position:relative;opacity:0;transform:translateY(8px)}
+.her.in{opacity:1;transform:none;transition:opacity 620ms var(--ease),transform 620ms var(--ease)}
+.her .hhead{display:flex;align-items:baseline;gap:10px;border-bottom:1px dashed var(--hair);padding-bottom:9px}
+.her .dest{font-family:Caveat,cursive;font-weight:700;font-size:31px;line-height:1}
+.her .dir{font-size:9px;letter-spacing:.12em;color:var(--muted);flex:1;text-align:right}
+.her .big{display:flex;align-items:baseline;gap:10px;margin:14px 2px 2px}
+.her .mins{font-size:44px;font-weight:500;color:var(--red);line-height:1;min-width:76px}
+.her .mins small{font-size:12px;color:var(--muted);font-weight:400}
+.her .what{font-size:11px;flex:1;min-width:0;line-height:1.6}
+.her .what b{font-weight:600}
+.lane{position:relative;margin:16px 2px 4px;height:34px}
+.lane svg.track{position:absolute;left:0;right:0;top:14px;width:100%;height:8px;overflow:visible}
+.lane svg.track path{fill:none;stroke:var(--ink);stroke-width:1.8;stroke-linecap:round;opacity:.5}
+.lane .end{position:absolute;top:26px;font-size:8px;letter-spacing:.08em;color:var(--muted)}
+.lane .end.r{right:0}
+.lane .end.l{left:0}
+.busdot{position:absolute;top:9px;width:16px;height:16px;margin-left:-8px;z-index:3;
+  transition:opacity 240ms var(--ease)}
+.busdot svg{display:block}
+.her .steps{margin-top:12px;font-size:10px;color:var(--muted);line-height:1.9}
+.her .steps b{color:var(--ink);font-weight:500}
+.her .flip{margin-top:12px;display:inline-block;font-size:10px;letter-spacing:.1em;color:var(--red);
+  border:none;background:none;border-bottom:1px dashed var(--red);padding:2px 0;cursor:pointer;
+  font-family:inherit;transition:opacity 120ms var(--ease)}
+.her .flip:active{opacity:.5}
+
+footer{margin-top:34px;text-align:center;font-size:10px;color:var(--muted);line-height:1.9}
+</style>
 </head>
 <body>
-<div id="app">
+<div id="grain"></div>
+<div class="wrap">
 
-  <header id="mast">
-    <div class="mast-left">
-      <span class="wordmark">HOPSCOTCH</span>
-      <span class="mast-sub">Milwaukee transit · Wisconsin &amp; Plankinton</span>
-    </div>
-    <div class="mast-right mono">
-      <span id="mast-date">—</span>
-      <span class="sep">·</span>
-      <span id="feedstat">CONNECTING</span>
-    </div>
-    <div class="mast-actions">
-      <button id="btn-search" class="txtbtn" aria-label="Search routes and stops">SEARCH</button>
-      <button id="tg-bus" class="txtbtn on" aria-pressed="true">BUS</button>
-      <button id="tg-hop" class="txtbtn on" aria-pressed="true">HOP</button>
-    </div>
-  </header>
-
-  <div id="disrupt" hidden>
-    <span id="disrupt-text" class="mono"></span>
-    <button id="disrupt-more" class="txtbtn inv">DETAILS</button>
+<header>
+  <svg id="sketch" viewBox="0 0 220 86" aria-hidden="true">
+    <path class="d" d="M14 62 L14 38 Q14 30 22 30 L86 30 Q94 30 94 38 L94 62"/>
+    <path class="d" d="M14 62 L94 62"/>
+    <path class="d" d="M22 30 L22 44 L40 44 L40 30 M48 30 L48 44 L66 44 L66 30 M74 30 L74 44 L88 44"/>
+    <circle class="d" cx="32" cy="66" r="6"/>
+    <circle class="d" cx="76" cy="66" r="6"/>
+    <path class="d" d="M126 62 L126 40 Q126 32 134 32 L196 32 Q204 32 204 40 L204 62 L126 62"/>
+    <path class="d" d="M150 32 L165 14 L180 32"/>
+    <path class="d" d="M134 32 L134 46 L158 46 L158 32 M166 32 L166 46 L196 46"/>
+    <circle class="d" cx="142" cy="66" r="5"/>
+    <circle class="d" cx="188" cy="66" r="5"/>
+  </svg>
+  <h1>Hopscotch</h1>
+  <div class="sub">MILWAUKEE, DRAWN LIVE · MCTS + THE HOP</div>
+  <div id="status"></div>
+  <div id="bigstats">
+    <div class="st"><div class="n" id="nv">0</div><div class="l">OUT NOW</div></div>
+    <div class="st"><div class="n" id="nl">0</div><div class="l">10+ LATE</div></div>
+    <div class="st"><div class="n" id="ng">0</div><div class="l">GHOSTS</div></div>
   </div>
+</header>
 
-  <main id="main">
-    <section id="board" aria-label="Departures">
-      <div id="sheetgrab" aria-hidden="true"><span></span></div>
+<nav id="nav">
+  <a href="index.html" class="here">HER LINES</a>
+  <a href="system.html">THE WHOLE SYSTEM</a>
+</nav>
 
-      <div id="hero" aria-live="polite">
-        <div class="hero-top"><span class="microlabel">Next out · Wisconsin &amp; Plankinton</span><span id="hero-clock" class="mono"></span></div>
-        <div class="hero-mid">
-          <span id="hero-route" class="routesq"></span>
-          <span id="hero-dest">—</span>
-        </div>
-        <div class="hero-bot">
-          <span id="hero-count" class="mono">—</span>
-          <span id="hero-status" class="mono"></span>
-        </div>
-      </div>
-
-      <nav id="tabs" aria-label="Sections">
-        <button data-tab="departures" class="on">Departures</button>
-        <button data-tab="trips">My trips</button>
-        <button data-tab="intel">Intel</button>
-      </nav>
-
-      <div id="tab-departures" class="tabpane on">
-        <div id="board-error" hidden>
-          <span class="mono" id="board-error-text">FEED DOWN</span>
-          <button id="board-retry" class="txtbtn">RETRY</button>
-        </div>
-        <div id="departboard"></div>
-      </div>
-
-      <div id="tab-trips" class="tabpane">
-        <p class="pane-note">Helen's everyday routes. Times are live where the feed reports them.</p>
-        <div id="trips"></div>
-      </div>
-
-      <div id="tab-intel" class="tabpane">
-        <h3 class="sech">Service alerts</h3>
-        <div id="intel-alerts"></div>
-        <h3 class="sech">Ghost buses <span class="sech-sub">scheduled yesterday, never showed</span></h3>
-        <div id="intel-ghosts"></div>
-        <h3 class="sech">Reliability <span class="sech-sub">share of checks under 3 min late</span></h3>
-        <div id="intel-rely"></div>
-      </div>
-    </section>
-
-    <section id="mapwrap">
-      <div id="map" aria-label="Live transit map"></div>
-
-      <div id="searchbox" hidden>
-        <input id="searchinput" type="text" placeholder="Route number or stop name" autocomplete="off" aria-label="Search routes and stops">
-        <div id="searchresults"></div>
-      </div>
-
-      <aside id="rail" hidden aria-label="Trip detail">
-        <div class="rail-head">
-          <span id="rail-route" class="routesq"></span>
-          <div class="rail-titles">
-            <div id="rail-dest">—</div>
-            <div id="rail-sub" class="mono">—</div>
-          </div>
-          <button id="rail-close" class="txtbtn" aria-label="Close">CLOSE</button>
-        </div>
-        <div class="rail-counts mono">
-          <div><span class="microlabel">To your stop</span><b id="rail-eta">—</b></div>
-          <div><span class="microlabel">Stops away</span><b id="rail-left">—</b></div>
-          <div><span class="microlabel">Status</span><b id="rail-status">—</b></div>
-        </div>
-        <div id="rail-stops"></div>
-        <div class="rail-actions">
-          <button id="rail-track" class="btn">Follow this bus</button>
-          <button id="rail-notify" class="btn ghost">Notify me</button>
-        </div>
-      </aside>
-
-      <button id="etapill" hidden>
-        <span id="etapill-route" class="routesq sm"></span>
-        <span id="etapill-text" class="mono">—</span>
-        <span id="etapill-x" aria-label="Stop following">×</span>
-      </button>
-
-      <div id="coords" class="mono"></div>
-    </section>
-  </main>
-
-  <div id="toast" role="status"></div>
+<div class="her" id="her-school">
+  <div class="hhead"><span class="dest" id="s-dest">To school</span><span class="dir" id="s-dir">14 · 30 WEST</span></div>
+  <div class="big">
+    <span class="mins" id="s-mins">--<small> MIN</small></span>
+    <span class="what" id="s-what">checking the corner&hellip;</span>
+  </div>
+  <div class="lane">
+    <svg class="track" viewBox="0 0 100 8" preserveAspectRatio="none"><path class="d" d="M2 4 Q 26 2 50 4 T 98 4"/></svg>
+    <span class="busdot" id="dot-s" style="opacity:0"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="2.5" y="4.5" width="11" height="8" rx="1.5" fill="none" stroke="#c84b3c" stroke-width="1.6"/><circle cx="5.5" cy="13.4" r="1.5" fill="none" stroke="#c84b3c" stroke-width="1.3"/><circle cx="10.5" cy="13.4" r="1.5" fill="none" stroke="#c84b3c" stroke-width="1.3"/></svg></span>
+    <span class="end l" id="s-end-l">HOME</span><span class="end r" id="s-end-r">SCHOOL</span>
+  </div>
+  <div class="steps" id="s-steps"></div>
+  <button class="flip" id="s-flip">heading home instead? &rarr;</button>
 </div>
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js"></script>
+
+<div class="her" id="her-lake">
+  <div class="hhead"><span class="dest" id="l-dest">To the lake</span><span class="dir" id="l-dir">14 EAST</span></div>
+  <div class="big">
+    <span class="mins" id="l-mins">--<small> MIN</small></span>
+    <span class="what" id="l-what">checking the corner&hellip;</span>
+  </div>
+  <div class="lane">
+    <svg class="track" viewBox="0 0 100 8" preserveAspectRatio="none"><path class="d" d="M2 4 Q 26 2 50 4 T 98 4"/></svg>
+    <span class="busdot" id="dot-l" style="opacity:0"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="2.5" y="4.5" width="11" height="8" rx="1.5" fill="none" stroke="#c84b3c" stroke-width="1.6"/><circle cx="5.5" cy="13.4" r="1.5" fill="none" stroke="#c84b3c" stroke-width="1.3"/><circle cx="10.5" cy="13.4" r="1.5" fill="none" stroke="#c84b3c" stroke-width="1.3"/></svg></span>
+    <span class="end l" id="l-end-l">HOME</span><span class="end r" id="l-end-r">THE LAKE</span>
+  </div>
+  <div class="steps" id="l-steps"></div>
+  <button class="flip" id="l-flip">heading home instead? &rarr;</button>
+</div>
+
+<footer>chalk washes off. so do these numbers, every 30 seconds.<br>
+buses from MCTS, streetcars from the Hop.</footer>
+</div>
+
+<script src="hop-core.js"></script>
+<script>
+(function(){
+"use strict";
+const HC = window.HOPCORE, M = HC.MOTION;
+
+const HER = {
+  school: {
+    out: { dest:"To school", dir:"14 · 30 WEST", stop:"5", routes:["14","30"], alight:"9642",
+           endl:"HOME", endr:"SCHOOL", travel:16,
+           steps:["Walk 2 min to <b>Wisconsin & Plankinton</b>","Ride the <b>14 or 30 west</b> to the N12 station","Walk 3 min to <b>Eckstein Hall</b>"] },
+    back:{ dest:"Home from school", dir:"14 · 30 EAST", stop:"9642", routes:["14","30"], alight:"5",
+           endl:"SCHOOL", endr:"HOME", travel:16,
+           steps:["Walk 3 min to the <b>N12 station</b>","Ride the <b>14 or 30 east</b> to Wisconsin & Plankinton","Walk 2 min <b>home</b>"] }
+  },
+  lake: {
+    out: { dest:"To the lake", dir:"14 EAST", stop:"63", routes:["14"], alight:"4391",
+           endl:"HOME", endr:"THE LAKE", travel:22,
+           steps:["Walk 2 min to <b>Wisconsin & Plankinton</b>","Ride the <b>14 east</b> to Prospect & Mason","Walk 6 min to <b>the water</b>"] },
+    back:{ dest:"Home from the lake", dir:"14 WEST", stop:"4391", routes:["14"], alight:"63",
+           endl:"THE LAKE", endr:"HOME", travel:22,
+           steps:["Walk 6 min to <b>Prospect & Mason</b>","Ride the <b>14 west</b> to Wisconsin & Plankinton","Walk 2 min <b>home</b>"] }
+  }
+};
+const herState = { school:"out", lake:"out" };
+const herDots = { school:{cur:0,target:0,shown:false}, lake:{cur:0,target:0,shown:false} };
+let shapeCache = {};
+
+function shapePts(rid){
+  if(shapeCache[rid]) return shapeCache[rid];
+  const sh = HC.STATIC.shapes[rid];
+  if(!sh) return null;
+  const dirs = Object.values(sh);
+  const pts = dirs.sort((a,b)=>b.length-a.length)[0].map(p=>[p[1],p[0]]);
+  const m = HC.polylineMetrics(pts);
+  shapeCache[rid] = {pts, m};
+  return shapeCache[rid];
+}
+function fmtClock(epoch){ const d=new Date(epoch*1000); let h=d.getHours(), m=("0"+d.getMinutes()).slice(-2), ap=h>=12?"pm":"am"; h=h%12||12; return h+":"+m+ap; }
+
+function herPrediction(cfg, live){
+  const list = (live.stops && live.stops[cfg.stop]) || [];
+  const now = Date.now()/1000;
+  const hits = list.filter(p=>cfg.routes.indexOf(p[0])>=0 && p[2]-now>-30).sort((a,b)=>a[2]-b[2]);
+  return hits[0] || null;
+}
+function herVehicle(cfg, p, live){
+  if(!p) return null;
+  return live.vehicles.find(v=>v.route===p[0] &&
+    (v.next||[]).some(n=>String(n.stop)===String(cfg.stop) && Math.abs(n.at-p[2])<8)) || null;
+}
+function herProgress(cfg, v){
+  if(!v) return null;
+  const c = shapePts(v.route); if(!c) return null;
+  const fV = HC.projectFrac(c.pts, c.m, v.lat, v.lon);
+  const st = HC.STATIC._stopMap[cfg.stop], al = HC.STATIC._stopMap[cfg.alight];
+  if(!st || !al) return null;
+  const f0 = HC.projectFrac(c.pts, c.m, st.lat, st.lon);
+  const f1 = HC.projectFrac(c.pts, c.m, al.lat, al.lon);
+  let t = (fV - f0) / (f1 - f0 || 1e-9);
+  return Math.max(0.02, Math.min(0.98, t));
+}
+
+function renderHer(key, live){
+  const cfg = HER[key][ herState[key] ];
+  const p = herPrediction(cfg, live);
+  const pre = key==="school" ? "s" : "l";
+  document.getElementById(pre+"-dest").textContent = cfg.dest;
+  document.getElementById(pre+"-dir").textContent = cfg.dir;
+  document.getElementById(pre+"-end-l").textContent = cfg.endl;
+  document.getElementById(pre+"-end-r").textContent = cfg.endr;
+  document.getElementById(pre+"-steps").innerHTML = cfg.steps.map(s=>"<div>"+s+"</div>").join("");
+  const minsEl = document.getElementById(pre+"-mins");
+  const whatEl = document.getElementById(pre+"-what");
+  const dot = document.getElementById("dot-"+pre);
+  if(p){
+    const mins = Math.max(0, Math.round((p[2]-Date.now()/1000)/60));
+    if(minsEl._set !== mins){
+      minsEl._set = mins;
+      minsEl.innerHTML = '<span id="'+pre+'-mnum">'+mins+'</span><small> MIN</small>';
+      HC.countUp(document.getElementById(pre+"-mnum"), mins);
+    }
+    whatEl.innerHTML = "the <b>"+p[0]+"</b> reaches her corner at <b>"+fmtClock(p[2])+"</b><br>there about <b>"+fmtClock(p[2]+cfg.travel*60)+"</b>";
+    const prog = herProgress(cfg, herVehicle(cfg, p, live));
+    if(prog !== null){
+      herDots[key].target = prog;
+      if(!herDots[key].shown){ herDots[key].cur = prog; herDots[key].shown = true; }
+      dot.style.opacity = "1";
+    } else dot.style.opacity = "0";
+  } else {
+    minsEl.innerHTML = '--<small> MIN</small>'; minsEl._set = null;
+    whatEl.innerHTML = "no live "+cfg.routes.join(" or ")+" listed at her corner yet - the next one announces itself a few minutes out.";
+    dot.style.opacity = "0"; herDots[key].shown = false;
+  }
+}
+function herFrame(){
+  ["school","lake"].forEach(key=>{
+    const pre = key==="school"?"s":"l";
+    const d = herDots[key];
+    if(!d.shown) return;
+    d.cur += (d.target-d.cur)*0.06;
+    document.getElementById("dot-"+pre).style.left = (d.cur*100)+"%";
+  });
+  requestAnimationFrame(herFrame);
+}
+document.getElementById("s-flip").addEventListener("click", ()=>{
+  herState.school = herState.school==="out" ? "back" : "out";
+  document.getElementById("s-flip").innerHTML = herState.school==="out" ? "heading home instead? &rarr;" : "heading to school instead? &rarr;";
+  document.getElementById("s-mins")._set = null;
+  if(HC.LIVE) renderHer("school", HC.LIVE);
+});
+document.getElementById("l-flip").addEventListener("click", ()=>{
+  herState.lake = herState.lake==="out" ? "back" : "out";
+  document.getElementById("l-flip").innerHTML = herState.lake==="out" ? "heading home instead? &rarr;" : "heading to the lake instead? &rarr;";
+  document.getElementById("l-mins")._set = null;
+  if(HC.LIVE) renderHer("lake", HC.LIVE);
+});
+
+function statusLine(live){
+  const el = document.getElementById("status");
+  const late = live.counts ? live.counts.late10 : 0;
+  const ghosts = (live.ghosts||[]).length;
+  el.innerHTML = '<b>'+live.status+'.</b> '+late+' running 10+ late · '+ghosts+' ghost'+(ghosts===1?'':'es')+' on the board';
+  HC.countUp(document.getElementById("nv"), live.vehicles.length + (live.hop||[]).length);
+  HC.countUp(document.getElementById("nl"), late);
+  HC.countUp(document.getElementById("ng"), ghosts);
+}
+function drawSketch(){
+  document.querySelectorAll("#sketch .d").forEach((p,i)=>HC.drawOn(p, 500, i*90));
+  document.querySelectorAll(".sect .d, .lane .d").forEach((p,i)=>HC.drawOn(p, 600, 200+i*120));
+}
+
+async function boot(){
+  await HC.loadStatic();
+  const live = await HC.loadLive();
+  drawSketch();
+  document.getElementById("her-school").classList.add("in");
+  setTimeout(()=>document.getElementById("her-lake").classList.add("in"), 140);
+  renderHer("school", live); renderHer("lake", live);
+  statusLine(live);
+  requestAnimationFrame(herFrame);
+  setInterval(async ()=>{
+    try{
+      const l2 = await HC.loadLive();
+      statusLine(l2);
+      renderHer("school", l2); renderHer("lake", l2);
+    }catch(e){}
+  }, 30000);
+  setInterval(()=>{ if(HC.LIVE){ renderHer("school", HC.LIVE); renderHer("lake", HC.LIVE); } }, 20000);
+}
+boot();
+})();
+</script>
 </body>
 </html>
