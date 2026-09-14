@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>The whole system · Hopscotch</title>
-<meta name="description" content="Every Milwaukee bus and Hop streetcar, drawn live on one chalk diagram.">
+<meta name="description" content="Every Milwaukee bus and Hop streetcar, drawn live on the real map.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23efe9dc'/><text x='16' y='23' font-family='cursive' font-size='20' fill='%233a352c' text-anchor='middle'>H</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
 <style>
 :root{
   --paper:#efe9dc; --card:#f4efe3; --ink:#3a352c; --muted:#8a8172;
@@ -41,37 +42,38 @@ h1{font-family:Caveat,cursive;font-weight:700;font-size:40px;line-height:1}
 #nav a:active{opacity:.5}
 
 #mapcard{background:var(--card);border:1.5px solid var(--ink);margin-top:16px;position:relative;
-  opacity:0;transform:translateY(8px)}
+  opacity:0;transform:translateY(8px);overflow:hidden}
 #mapcard.in{opacity:1;transform:none;transition:opacity 620ms var(--ease),transform 620ms var(--ease)}
 #stage{height:min(58vh,470px);position:relative}
-#stage svg{width:100%;height:100%;display:block}
-.route-ghost{fill:none;stroke:#e2d9c6;stroke-width:1;stroke-linecap:round}
-.route-live{fill:none;stroke-width:2.4;stroke-linecap:round;cursor:pointer;
+#mapbox{position:absolute;inset:0}
+#mapbox .maplibregl-canvas{outline:none}
+#overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3}
+#overlay.moving *{transition:none!important}
+.route-ghost{fill:none;stroke:#c9c2b2;stroke-width:1;stroke-linecap:round;opacity:.7}
+.route-live{fill:none;stroke-width:2.6;stroke-linecap:round;pointer-events:stroke;cursor:pointer;
   transition:opacity 420ms var(--ease),stroke-width 240ms var(--ease)}
-.veh{transition:opacity 240ms var(--ease)}
-.veh circle{stroke:var(--card);stroke-width:1.4}
-#stage.dim .route-live{opacity:.08}
-#stage.dim .route-live.sel{opacity:1;stroke-width:3.6}
+.veh{transition:opacity 240ms var(--ease);pointer-events:auto;cursor:pointer}
+.veh circle.dot{stroke:#f4efe3;stroke-width:1.6}
+#stage.dim .route-live{opacity:.07}
+#stage.dim .route-live.sel{opacity:1;stroke-width:3.8}
 #stage.dim .veh{opacity:.1}
 #stage.dim .veh.sel{opacity:1}
+.fol-ring{fill:none;stroke:#c84b3c;stroke-width:2.2}
 #mapcap{display:flex;justify-content:space-between;padding:8px 12px;border-top:1px dashed var(--hair);
   font-size:9px;letter-spacing:.1em;color:var(--muted)}
-#zoombtn{position:absolute;top:10px;right:10px;z-index:5;background:var(--card);
+#mapcap b{color:var(--ink);font-weight:500}
+#zoombtn{position:absolute;top:10px;right:10px;z-index:6;background:var(--card);
   border:1.5px solid var(--ink);padding:7px 10px;font-family:inherit;font-size:9px;
   letter-spacing:.12em;color:var(--ink);cursor:pointer;
   transition:transform 120ms var(--ease),opacity 240ms var(--ease)}
 #zoombtn:active{transform:scale(.95)}
 #helenmark{opacity:0;transition:opacity 420ms var(--ease)}
 #helenmark.on{opacity:1}
-#followcap{position:absolute;top:10px;left:10px;z-index:5;background:var(--card);
+#followcap{position:absolute;top:10px;left:10px;z-index:6;background:var(--card);
   border:1.5px solid var(--ink);padding:7px 10px;font-size:9px;letter-spacing:.12em;
-  color:var(--ink);display:none;align-items:center;gap:8px}
+  color:var(--ink);display:none;align-items:center;gap:8px;max-width:72%}
 #followcap.on{display:flex}
-#followcap a{color:var(--red);text-decoration:none;border-bottom:1px dashed var(--red)}
-.veh.followbus{opacity:1!important}
-.veh.dimmed{opacity:.12}
-.fol-ring{fill:none;stroke:#c84b3c;stroke-width:2.2}
-#mapcap b{color:var(--ink);font-weight:500}
+#followcap a{color:var(--red);text-decoration:none;border-bottom:1px dashed var(--red);flex:0 0 auto;white-space:nowrap}
 
 #chips{display:flex;gap:8px;overflow-x:auto;padding:12px 2px 6px;scrollbar-width:none}
 #chips::-webkit-scrollbar{display:none}
@@ -129,13 +131,16 @@ footer{margin-top:30px;text-align:center;font-size:10px;color:var(--muted);line-
 <div id="mapcard">
   <button id="zoombtn">THE WHOLE CITY</button>
   <div id="followcap"><span id="followtxt"></span><a href="system.html">STOP</a></div>
-  <div id="stage"><svg id="map" preserveAspectRatio="xMidYMid meet"></svg></div>
+  <div id="stage">
+    <div id="mapbox"></div>
+    <svg id="overlay" preserveAspectRatio="none"></svg>
+  </div>
   <div id="mapcap"><span>CHALK LINES = ROUTES RUNNING NOW · TAP ONE</span><span id="maplive"><b>--</b> MOVING</span></div>
 </div>
 
 <div id="chips"></div>
 
-<footer>ghost lines are every route the city owns.<br>chalk lines are the ones out right now.</footer>
+<footer>one finger scrolls the page, two fingers move the map.<br>buses from MCTS, streetcars from the Hop.</footer>
 </div>
 
 <div id="sheet">
@@ -144,68 +149,113 @@ footer{margin-top:30px;text-align:center;font-size:10px;color:var(--muted);line-
   <div id="rows"></div>
 </div>
 
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="hop-core.js"></script>
 <script>
 (function(){
 "use strict";
 const HC = window.HOPCORE, M = HC.MOTION;
 const NS = "http://www.w3.org/2000/svg";
-let S, fit, tracker = HC.makeTracker(), sel = null, shapeCache = {};
+const easeOC = t => 1 - Math.pow(1-t, 3);
+
+/* ---- follow-along config ---- */
+const FOL_HER = {
+  school: {
+    out: { stop:"5", routes:["14","30"], alight:"9642", to:"wisconsin & plankinton" },
+    back:{ stop:"9642", routes:["14","30"], alight:"5", to:"the N12 station" }
+  },
+  lake: {
+    out: { stop:"63", routes:["14"], alight:"4391", to:"wisconsin & plankinton" },
+    back:{ stop:"4391", routes:["14"], alight:"63", to:"prospect & mason" }
+  }
+};
+const FOL_Q = new URLSearchParams(location.search);
+const FOL = (function(){
+  const key = FOL_Q.get("follow");
+  if(!key || !FOL_HER[key]) return null;
+  const dir = FOL_Q.get("dir")==="back" ? "back" : "out";
+  return { key, cfg: FOL_HER[key][dir] };
+})();
+let folVehId = null;
+
+const HELEN_LL = [43.03873, -87.91116]; /* 740 N Plankinton */
+const DOWNTOWN = { center: [HELEN_LL[1], HELEN_LL[0]], zoom: 14.15 };
+
+let S, map, tracker = HC.makeTracker(), sel = null, shapeCache = {};
+let gGhost, gLive, gVeh, gMark, zoomed = true, renderQueued = false;
 
 function shapePts(rid){
   if(shapeCache[rid]) return shapeCache[rid];
   const sh = S.shapes[rid];
   if(!sh) return null;
   const dirs = Object.values(sh);
-  const pts = dirs.sort((a,b)=>b.length-a.length)[0].map(p=>[p[1],p[0]]);
+  let pts = dirs.sort((a,b)=>b.length-a.length)[0].map(p=>[p[1],p[0]]);
+  /* stride-sample so re-projection stays cheap on the phone */
+  if(pts.length > 160){
+    const step = Math.ceil(pts.length/160), out = [];
+    for(let i=0;i<pts.length;i+=step) out.push(pts[i]);
+    if(out[out.length-1] !== pts[pts.length-1]) out.push(pts[pts.length-1]);
+    pts = out;
+  }
   const m = HC.polylineMetrics(pts);
   shapeCache[rid] = {pts, m};
   return shapeCache[rid];
 }
+function px(lat, lon){ const p = map.project([lon, lat]); return p; }
 function pathFor(rid){
   const c = shapePts(rid); if(!c) return null;
-  return c.pts.map((p,i)=>{ const q=fit(p[1],p[0]); return (i?"L":"M")+q.x.toFixed(1)+","+q.y.toFixed(1); }).join("");
+  return c.pts.map((p,i)=>{ const q = px(p[1], p[0]); return (i?"L":"M")+q.x.toFixed(1)+","+q.y.toFixed(1); }).join("");
 }
-function buildMap(){
+
+function buildOverlay(){
   const stage = document.getElementById("stage");
-  const w = stage.clientWidth, h = stage.clientHeight;
-  const svg = document.getElementById("map");
-  svg.setAttribute("viewBox","0 0 "+w+" "+h);
-  let a=[90,-90,0,-180];
-  Object.values(S.shapes).forEach(dirs=>Object.values(dirs).forEach(pts=>pts.forEach(p=>{
-    a[0]=Math.min(a[0],p[0]); a[1]=Math.max(a[1],p[0]); a[2]=Math.min(a[2],p[1]); a[3]=Math.max(a[3],p[1]);
-  })));
-  fit = HC.fitter(a, w, h, 18);
+  const svg = document.getElementById("overlay");
+  svg.setAttribute("viewBox","0 0 "+stage.clientWidth+" "+stage.clientHeight);
   svg.innerHTML = "";
-  const gWorld = document.createElementNS(NS,"g"); gWorld.id = "world"; svg.appendChild(gWorld);
-  const gGhost = document.createElementNS(NS,"g"); gWorld.appendChild(gGhost);
-  const gLive  = document.createElementNS(NS,"g"); gWorld.appendChild(gLive);
-  const gVeh   = document.createElementNS(NS,"g"); gVeh.id="gveh"; gWorld.appendChild(gVeh);
-  const gMark  = document.createElementNS(NS,"g"); gMark.id="helenmark"; gWorld.appendChild(gMark);
-  buildHelenMark(gMark);
-  let i=0;
+  gGhost = document.createElementNS(NS,"g"); svg.appendChild(gGhost);
+  gLive  = document.createElementNS(NS,"g"); svg.appendChild(gLive);
+  gVeh   = document.createElementNS(NS,"g"); svg.appendChild(gVeh);
+  gMark  = document.createElementNS(NS,"g"); gMark.id = "helenmark"; svg.appendChild(gMark);
+  /* ghost network: every line the city owns */
   Object.keys(S.shapes).forEach(rid=>{
-    const d = pathFor(rid); if(!d) return;
+    const c = shapePts(rid); if(!c) return;
     const p = document.createElementNS(NS,"path");
-    p.setAttribute("d",d); p.setAttribute("class","route-ghost"); p.setAttribute("vector-effect","non-scaling-stroke");
+    p.setAttribute("class","route-ghost"); p.dataset.rid = rid;
     gGhost.appendChild(p);
-    HC.drawOn(p, 300, i*10); i++;
   });
-  return {gLive, gVeh};
+  /* her corner */
+  const c = document.createElementNS(NS,"circle");
+  c.setAttribute("r","7"); c.setAttribute("class","fol-ring");
+  const t = document.createElementNS(NS,"text");
+  t.setAttribute("x","11"); t.setAttribute("y","3");
+  t.setAttribute("style","font-family:'IBM Plex Mono',monospace;font-size:9px;fill:#c84b3c;letter-spacing:.08em;paint-order:stroke;stroke:#f4efe3;stroke-width:3px");
+  t.textContent = "HER CORNER";
+  gMark.appendChild(c); gMark.appendChild(t);
 }
-function paintLive(gLive, live){
+function renderOverlay(){
+  if(gGhost) Array.from(gGhost.children).forEach(p=>{ const d = pathFor(p.dataset.rid); if(d) p.setAttribute("d", d); });
+  if(gLive) Array.from(gLive.children).forEach(p=>{ const d = pathFor(p.dataset.rid); if(d) p.setAttribute("d", d); });
+  if(gMark){ const q = px(HELEN_LL[0], HELEN_LL[1]); gMark.setAttribute("transform","translate("+q.x.toFixed(1)+","+q.y.toFixed(1)+")"); }
+}
+function queueRender(){
+  if(renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(()=>{ renderQueued = false; renderOverlay(); });
+}
+
+function paintLive(live, first){
   gLive.innerHTML = "";
   const seen = {};
   live.vehicles.forEach(v=>{ seen[v.route]=true; });
   const rts = Object.keys(seen).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
   rts.forEach((rid,i)=>{
-    const d = pathFor(rid); if(!d) return;
+    if(!shapePts(rid)) return;
     const p = document.createElementNS(NS,"path");
-    p.setAttribute("d",d); p.setAttribute("class","route-live"); p.setAttribute("vector-effect","non-scaling-stroke");
+    p.setAttribute("class","route-live");
     p.style.stroke = HC.routeColor(rid); p.dataset.rid = rid;
     p.addEventListener("click",()=>select(rid));
     gLive.appendChild(p);
-    HC.drawOn(p, 500, 350+i*55);
+    if(first) HC.drawOn(p, 500, 350+i*55);
   });
   if(live.hop && live.hop.length){
     const stops = S.hop.stops.slice().sort((a,b)=>a.id-b.id);
@@ -213,34 +263,34 @@ function paintLive(gLive, live){
     if(pts.length>2){
       const m = HC.polylineMetrics(pts);
       shapeCache["HOP"] = {pts, m};
-      const d = pts.map((p,i)=>{const q=fit(p[1],p[0]); return (i?"L":"M")+q.x.toFixed(1)+","+q.y.toFixed(1);}).join("");
       const p = document.createElementNS(NS,"path");
-      p.setAttribute("d",d); p.setAttribute("class","route-live"); p.setAttribute("vector-effect","non-scaling-stroke");
+      p.setAttribute("class","route-live");
       p.style.stroke = HC.routeColor("HOP"); p.dataset.rid = "HOP";
       p.addEventListener("click",()=>select("HOP"));
       gLive.appendChild(p);
-      HC.drawOn(p, 500, 350+rts.length*55);
+      if(first) HC.drawOn(p, 500, 350+rts.length*55);
     }
   }
+  renderOverlay();
   return rts;
 }
-function paintVehicles(gVeh, live, first){
+function paintVehicles(live, first){
   const keys = [];
   live.vehicles.forEach(v=>{
     const c = shapePts(v.route); if(!c) return;
     const f = HC.projectFrac(c.pts, c.m, v.lat, v.lon);
     const key = "b"+v.id; keys.push(key);
     tracker.set(key, f);
-    let g = document.getElementById(key);
+    let g = gVeh.querySelector('[id="'+key+'"]');
     if(!g){
       g = document.createElementNS(NS,"g");
       g.setAttribute("class","veh"); g.id = key; g.dataset.rid = v.route;
       const cc = document.createElementNS(NS,"circle");
-      cc.setAttribute("r","4.2"); cc.style.fill = HC.routeColor(v.route);
+      cc.setAttribute("class","dot"); cc.setAttribute("r","5"); cc.style.fill = HC.routeColor(v.route);
       g.appendChild(cc);
       g.addEventListener("click",()=>select(v.route));
       gVeh.appendChild(g);
-      if(first && !FOL){ g.style.opacity="0"; setTimeout(()=>{g.style.opacity="1";}, 600+Math.random()*800); }
+      if(first && !FOL){ g.style.opacity="0"; setTimeout(()=>{ g.style.opacity=""; }, 600+Math.random()*800); }
     }
     g.dataset.fracKey = key;
   });
@@ -249,36 +299,33 @@ function paintVehicles(gVeh, live, first){
     const f = HC.projectFrac(c.pts, c.m, hv.lat, hv.lon);
     const key = "h"+hv.id; keys.push(key);
     tracker.set(key, f);
-    let g = document.getElementById(key);
+    let g = gVeh.querySelector('[id="'+key+'"]');
     if(!g){
       g = document.createElementNS(NS,"g");
       g.setAttribute("class","veh"); g.id = key; g.dataset.rid = "HOP";
       const r = document.createElementNS(NS,"rect");
-      r.setAttribute("width","8"); r.setAttribute("height","8");
-      r.setAttribute("x","-4"); r.setAttribute("y","-4");
-      r.style.fill = HC.routeColor("HOP"); r.style.stroke="#f4efe3"; r.style.strokeWidth="1.4";
+      r.setAttribute("width","9"); r.setAttribute("height","9");
+      r.setAttribute("x","-4.5"); r.setAttribute("y","-4.5");
+      r.style.fill = HC.routeColor("HOP"); r.style.stroke="#f4efe3"; r.style.strokeWidth="1.6";
       g.appendChild(r);
       g.addEventListener("click",()=>select("HOP"));
       gVeh.appendChild(g);
-      if(first && !FOL){ g.style.opacity="0"; setTimeout(()=>{g.style.opacity="1";}, 600+Math.random()*800); }
+      if(first && !FOL){ g.style.opacity="0"; setTimeout(()=>{ g.style.opacity=""; }, 600+Math.random()*800); }
     }
     g.dataset.fracKey = key;
   });
   Array.from(gVeh.children).forEach(g=>{ if(keys.indexOf(g.id)<0) g.remove(); });
 }
 function frame(){
-  const gVeh = document.getElementById("gveh");
-  if(gVeh && fit){
+  if(gVeh && map){
     tracker.tick();
     Array.from(gVeh.children).forEach(g=>{
       const key = g.dataset.fracKey; if(!key) return;
       const f = tracker.get(key); if(f===null) return;
       const c = shapeCache[g.dataset.rid]; if(!c) return;
       const ll = HC.pointAtFrac(c.pts, c.m, f);
-      const q = fit(ll[1], ll[0]);
-      const zk = (document.getElementById("world")._zt || {k:1}).k;
-      const inv = 1/Math.sqrt(zk); /* dots grow a little at zoom, not into blobs */
-      g.setAttribute("transform","translate("+q.x.toFixed(2)+","+q.y.toFixed(2)+") scale("+inv.toFixed(3)+")");
+      const q = px(ll[1], ll[0]);
+      g.setAttribute("transform","translate("+q.x.toFixed(2)+","+q.y.toFixed(2)+")");
     });
   }
   requestAnimationFrame(frame);
@@ -343,98 +390,28 @@ function closeSheet(){
   document.getElementById("sheet").classList.remove("open");
 }
 document.getElementById("sx").addEventListener("click", closeSheet);
-document.getElementById("zoombtn").addEventListener("click", ()=>flyTo(!zoomed));
-document.getElementById("map").addEventListener("click", e=>{ if(e.target.id==="map") closeSheet(); });
 
-function statusLine(live){
-  const el = document.getElementById("status");
-  const late = live.counts ? live.counts.late10 : 0;
-  const ghosts = (live.ghosts||[]).length;
-  el.innerHTML = '<b>'+live.status+'.</b> '+late+' running 10+ late · '+ghosts+' ghost'+(ghosts===1?'':'es')+' on the board';
-  const mv = document.querySelector("#maplive b");
-  if(mv) mv.textContent = live.vehicles.length + (live.hop||[]).length;
-}
-
-/* ---- Helen's downtown is the default view; expand to the whole city ---- */
-const HELEN_LL = [43.03873, -87.91116]; /* 740 N Plankinton */
-const ZOOM_BOUNDS = [43.0305, 43.0465, -87.9360, -87.8985]; /* minLat,maxLat,minLon,maxLon: downtown + Marquette */
-let zoomed = true, zoomAnim = null;
-function buildHelenMark(g){
-  const q = fit(HELEN_LL[0], HELEN_LL[1]);
-  g._anchor = q;
-  const c = document.createElementNS(NS,"circle");
-  c.setAttribute("cx","0"); c.setAttribute("cy","0"); c.setAttribute("r","7");
-  c.setAttribute("fill","none"); c.setAttribute("stroke","#c84b3c"); c.setAttribute("stroke-width","1.6");
-  c.setAttribute("vector-effect","non-scaling-stroke");
-  const t = document.createElementNS(NS,"text");
-  t.setAttribute("x","11"); t.setAttribute("y","3");
-  t.setAttribute("style","font-family:'IBM Plex Mono',monospace;font-size:9px;fill:#c84b3c;letter-spacing:.08em");
-  t.textContent = "HER CORNER";
-  g.appendChild(c); g.appendChild(t);
-}
-function zoomTransform(){
-  const p0 = fit(ZOOM_BOUNDS[1], ZOOM_BOUNDS[2]);
-  const p1 = fit(ZOOM_BOUNDS[0], ZOOM_BOUNDS[3]);
-  const stage = document.getElementById("stage");
-  const w = stage.clientWidth, h = stage.clientHeight;
-  const dw = p1.x-p0.x, dh = p1.y-p0.y;
-  const k = Math.min(w/dw, h/dh) * 0.90;
-  const tx = (w - dw*k)/2 - p0.x*k;
-  const ty = (h - dh*k)/2 - p0.y*k;
-  return {k, tx, ty};
-}
-function applyZoom(target){
-  const g = document.getElementById("world");
-  g._zt = target;
-  g.setAttribute("transform","translate("+target.tx.toFixed(1)+","+target.ty.toFixed(1)+") scale("+target.k.toFixed(3)+")");
-  const m = document.getElementById("helenmark");
-  if(m && m._anchor){
-    const inv = 1/target.k;
-    m.setAttribute("transform","translate("+m._anchor.x.toFixed(1)+","+m._anchor.y.toFixed(1)+") scale("+inv.toFixed(3)+")");
-  }
-}
+/* ---- zoom: downtown by default, whole city on tap ---- */
 function flyTo(on){
   zoomed = on;
-  const target = on ? zoomTransform() : {k:1, tx:0, ty:0};
-  const g = document.getElementById("world");
-  const from = g._zt || {k:1, tx:0, ty:0};
-  if(zoomAnim) cancelAnimationFrame(zoomAnim);
   document.getElementById("helenmark").classList.toggle("on", on);
   document.getElementById("zoombtn").textContent = on ? "THE WHOLE CITY" : "BACK TO DOWNTOWN";
-  if(HC.FROZEN){ applyZoom(target); return; }
-  const start = performance.now(), dur = HC.MOTION.draw;
-  function step(now){
-    const t = Math.min(1,(now-start)/dur), e = HC.easeOutCubic(t);
-    applyZoom({
-      k: from.k + (target.k-from.k)*e,
-      tx: from.tx + (target.tx-from.tx)*e,
-      ty: from.ty + (target.ty-from.ty)*e
+  if(on){
+    map.flyTo({ center: DOWNTOWN.center, zoom: DOWNTOWN.zoom, duration: HC.MOTION.draw, easing: easeOC });
+  } else {
+    let b = null;
+    Object.keys(S.shapes).forEach(rid=>{
+      const c = shapePts(rid); if(!c) return;
+      c.pts.forEach(p=>{ if(!b) b = [[p[0],p[1]],[p[0],p[1]]];
+        b[0][0]=Math.min(b[0][0],p[0]); b[0][1]=Math.min(b[0][1],p[1]);
+        b[1][0]=Math.max(b[1][0],p[0]); b[1][1]=Math.max(b[1][1],p[1]); });
     });
-    if(t<1) zoomAnim = requestAnimationFrame(step); else zoomAnim = null;
+    map.fitBounds(b, { padding: 26, duration: HC.MOTION.draw, easing: easeOC });
   }
-  zoomAnim = requestAnimationFrame(step);
 }
+document.getElementById("zoombtn").addEventListener("click", ()=>flyTo(!zoomed));
 
-/* ---- follow-along: one bus, her trip, live ---- */
-const FOL_HER = {
-  school: {
-    out: { stop:"5", routes:["14","30"], alight:"9642", to:"wisconsin & plankinton" },
-    back:{ stop:"9642", routes:["14","30"], alight:"5", to:"the N12 station" }
-  },
-  lake: {
-    out: { stop:"63", routes:["14"], alight:"4391", to:"wisconsin & plankinton" },
-    back:{ stop:"4391", routes:["14"], alight:"63", to:"prospect & mason" }
-  }
-};
-const FOL_Q = new URLSearchParams(location.search);
-const FOL = (function(){
-  const key = FOL_Q.get("follow");
-  if(!key || !FOL_HER[key]) return null;
-  const dir = FOL_Q.get("dir")==="back" ? "back" : "out";
-  return { key, cfg: FOL_HER[key][dir] };
-})();
-let folVehId = null;
-
+/* ---- follow mode ---- */
 function folPrediction(live){
   if(!FOL) return null;
   const list = (live.stops && live.stops[FOL.cfg.stop]) || [];
@@ -447,35 +424,14 @@ function folVehicle(live, p){
   return live.vehicles.find(v=>FOL.cfg.routes.indexOf(v.route)>=0 &&
     (v.next||[]).some(n=>String(n.stop)===String(FOL.cfg.stop) && Math.abs(n.at-p[2])<8)) || null;
 }
-function folCameraBounds(v){
-  /* the segment of the primary route between board and alight stops, plus the bus itself */
-  const c = shapePts(FOL.cfg.routes[0]); if(!c) return null;
-  const st = S._stopMap[FOL.cfg.stop], al = S._stopMap[FOL.cfg.alight];
-  if(!st || !al) return null;
-  const f0 = HC.projectFrac(c.pts, c.m, st.lat, st.lon);
-  const f1 = HC.projectFrac(c.pts, c.m, al.lat, al.lon);
-  const lo = Math.min(f0,f1), hi = Math.max(f0,f1);
-  let a=[90,-90,0,-180];
-  const n = 40;
-  for(let i=0;i<=n;i++){
-    const ll = HC.pointAtFrac(c.pts, c.m, lo+(hi-lo)*i/n);
-    a[0]=Math.min(a[0],ll[1]); a[1]=Math.max(a[1],ll[1]); a[2]=Math.min(a[2],ll[0]); a[3]=Math.max(a[3],ll[0]);
-  }
-  if(v){ a[0]=Math.min(a[0],v.lat); a[1]=Math.max(a[1],v.lat); a[2]=Math.min(a[2],v.lon); a[3]=Math.max(a[3],v.lon); }
-  const plat=(a[1]-a[0])*.35 + 0.001, plon=(a[3]-a[2])*.35 + 0.001;
-  return [a[0]-plat, a[1]+plat, a[2]-plon, a[3]+plon];
-}
 function folApply(live, first){
-  const cap = document.getElementById("followcap");
-  cap.classList.add("on");
+  document.getElementById("followcap").classList.add("on");
   document.getElementById("chips").style.display = "none";
   document.getElementById("zoombtn").style.display = "none";
-  /* isolate her routes, dim the rest */
   document.getElementById("stage").classList.add("dim");
   document.querySelectorAll(".route-live").forEach(p=>{
     p.classList.toggle("sel", FOL.cfg.routes.indexOf(p.dataset.rid)>=0);
   });
-  /* find the bus */
   const p = folPrediction(live);
   const v = folVehicle(live, p);
   folVehId = v ? "b"+v.id : null;
@@ -493,55 +449,81 @@ function folApply(live, first){
   } else {
     txt.textContent = "NO LIVE BUS LISTED YET · WATCH THIS SPACE";
   }
-  /* camera on the trip segment, capped so it stays a map not a microscope */
-  const b = folCameraBounds(v);
-  if(b){
-    const stage = document.getElementById("stage");
-    const w = stage.clientWidth, h = stage.clientHeight;
-    const p0 = fit(b[1], b[2]), p1 = fit(b[0], b[3]);
-    const dw = p1.x-p0.x, dh = p1.y-p0.y;
-    const k = Math.min(Math.min(w/dw, h/dh) * 0.82, 7);
-    const tx = (w - dw*k)/2 - p0.x*k;
-    const ty = (h - dh*k)/2 - p0.y*k;
-    applyZoom({k, tx, ty});
+  if(first){
+    /* camera: her trip segment plus the bus, on real streets */
+    const c = shapePts(FOL.cfg.routes[0]);
+    if(c){
+      const st = S._stopMap[FOL.cfg.stop], al = S._stopMap[FOL.cfg.alight];
+      let b = [[st.lon,st.lat],[st.lon,st.lat]];
+      const grow = (lat,lon)=>{ b[0][0]=Math.min(b[0][0],lon); b[0][1]=Math.min(b[0][1],lat); b[1][0]=Math.max(b[1][0],lon); b[1][1]=Math.max(b[1][1],lat); };
+      grow(al.lat, al.lon);
+      const f0 = HC.projectFrac(c.pts, c.m, st.lat, st.lon);
+      const f1 = HC.projectFrac(c.pts, c.m, al.lat, al.lon);
+      const lo = Math.min(f0,f1), hi = Math.max(f0,f1);
+      for(let i=0;i<=24;i++){ const ll = HC.pointAtFrac(c.pts, c.m, lo+(hi-lo)*i/24); grow(ll[1], ll[0]); }
+      if(v) grow(v.lat, v.lon);
+      map.fitBounds(b, { padding: {top:70,left:34,right:34,bottom:60}, duration: 0 });
+    }
+    document.getElementById("helenmark").classList.add("on");
   }
 }
-/* ring around the followed bus, drawn each frame */
 function folFrame(){
   if(FOL && folVehId){
-    const g = document.getElementById(folVehId);
+    const g = gVeh ? gVeh.querySelector('[id="'+folVehId+'"]') : null;
     if(g && !g.querySelector(".fol-ring")){
       const r = document.createElementNS(NS,"circle");
-      r.setAttribute("class","fol-ring"); r.setAttribute("r","9");
+      r.setAttribute("class","fol-ring"); r.setAttribute("r","10");
       g.insertBefore(r, g.firstChild);
     }
-    document.querySelectorAll(".veh").forEach(o=>{
+    if(gVeh) Array.from(gVeh.children).forEach(o=>{
       if(o.id!==folVehId){ const r=o.querySelector(".fol-ring"); if(r) r.remove(); }
     });
   }
   requestAnimationFrame(folFrame);
 }
 
+function statusLine(live){
+  const el = document.getElementById("status");
+  const late = live.counts ? live.counts.late10 : 0;
+  const ghosts = (live.ghosts||[]).length;
+  el.innerHTML = '<b>'+live.status+'.</b> '+late+' running 10+ late · '+ghosts+' ghost'+(ghosts===1?'':'es')+' on the board';
+  const mv = document.querySelector("#maplive b");
+  if(mv) mv.textContent = live.vehicles.length + (live.hop||[]).length;
+}
+
 async function boot(){
   S = await HC.loadStatic();
+  map = new maplibregl.Map({
+    container: "mapbox",
+    style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+    center: DOWNTOWN.center,
+    zoom: DOWNTOWN.zoom,
+    cooperativeGestures: true,
+    attributionControl: { compact: true }
+  });
+  map.dragRotate.disable();
+  map.touchZoomRotate.enable();
+  map.touchZoomRotate.disableRotation();
+  map.on("move", ()=>{ document.getElementById("overlay").classList.add("moving"); queueRender(); });
+  map.on("moveend", ()=>{ document.getElementById("overlay").classList.remove("moving"); renderOverlay(); });
+  map.on("resize", ()=>{ buildOverlay(); if(HC.LIVE) paintLive(HC.LIVE, false); renderOverlay(); });
+  await new Promise(res => map.on("load", res));
+
   const live = await HC.loadLive();
   document.getElementById("mapcard").classList.add("in");
-  const {gLive, gVeh} = buildMap();
-  const rts = paintLive(gLive, live);
-  paintVehicles(gVeh, live, true);
-  renderChips(rts, live);
+  buildOverlay();
+  const rts = paintLive(live, true);
+  paintVehicles(live, true);
+  if(!FOL) renderChips(rts, live);
   statusLine(live);
   if(FOL){ folApply(live, true); }
-  else {
-    applyZoom(zoomTransform());
-    document.getElementById("helenmark").classList.add("on");
-  }
+  else { document.getElementById("helenmark").classList.add("on"); }
   requestAnimationFrame(frame);
   requestAnimationFrame(folFrame);
   setInterval(async ()=>{
     try{
       const l2 = await HC.loadLive();
-      paintVehicles(document.getElementById("gveh"), l2, false);
+      paintVehicles(l2, false);
       statusLine(l2);
       if(FOL) folApply(l2, false);
       else if(sel) select(sel);
@@ -552,4 +534,4 @@ boot();
 })();
 </script>
 </body>
-  </html>
+</html>
