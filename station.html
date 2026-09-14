@@ -92,7 +92,7 @@ body{background:var(--marble);color:var(--ink);font-family:"IBM Plex Mono",monos
 "use strict";
 const HC = window.HOPCORE, M = HC.MOTION;
 const rowsEl = document.getElementById("rows");
-let S, board = []; /* {key,route,stop,name,at,delay,bus} */
+let S;
 
 /* clock */
 (function buildClock(){
@@ -144,6 +144,7 @@ function collect(live){
   live.vehicles.forEach(v=>{
     if(!v.next || !v.next[0]) return;
     const n = v.next[0];
+    if(n.at - now < -20) return; /* only what has not left yet */
     rows.push({key:v.id+"-"+n.stop, route:v.route, stop:n.stop, name:n.name,
       at:n.at, delay:v.delay||0, bus:v.id});
   });
@@ -159,74 +160,46 @@ function statFor(r){
 }
 
 function render(first){
-  const now = Date.now()/1000;
-  board = board.filter(r => r.at-now > (first ? -3600 : -25)); /* drop long-gone */
-  const seen = {};
-  board.forEach(r=>seen[r.key]=r);
-  const fresh = collect(HC.LIVE);
-  fresh.forEach(r=>{ if(!seen[r.key]) board.push(r); });
-  board.sort((a,b)=>a.at-b.at);
-  board = board.slice(0,18);
-  if(first && !board.length){
-    rowsEl.innerHTML = '<div class="row in" data-key="frozen"><span class="rt" style="background:#1c1913">--</span><span class="dest"><span class="rname">Board frozen</span><span class="stop">the feed went quiet; check back shortly</span></span><span class="st ok"><span class="stxt">HELD</span></span><span class="dep" style="text-align:right"><span class="mn">--</span></span></div>';
+  const rows = collect(HC.LIVE);
+  rowsEl.innerHTML = "";
+  if(!rows.length){
+    rowsEl.innerHTML = '<div class="row in"><span class="rt" style="background:#1c1913">--</span><span class="dest"><span class="rname">Board held</span><span class="stop">the feed is quiet right now; it will refill itself</span></span><span class="st ok"><span class="stxt">HELD</span></span><span class="dep" style="text-align:right"><span class="mn">--</span></span></div>';
     return;
   }
-
-  /* reconcile DOM */
-  const dom = {};
-  Array.from(rowsEl.children).forEach(el=>dom[el.dataset.key]=el);
-  board.forEach((r,i)=>{
-    const mins = Math.max(0, Math.round((r.at-now)/60));
+  rows.forEach((r,i)=>{
+    const mins = Math.max(0, Math.round((r.at-Date.now()/1000)/60));
     const st = statFor(r);
-    let el = dom[r.key];
-    if(!el){
-      el = document.createElement("div");
-      el.className = "row"; el.dataset.key = r.key;
-      el.innerHTML =
-        '<span class="rt" style="background:'+HC.routeColor(r.route)+'">'+r.route+'</span>'+
-        '<span class="dest"><span class="rname">'+HC.routeName(r.route)+'</span>'+
-        '<span class="stop">at '+r.name.toLowerCase()+'</span></span>'+
-        '<span class="st"><span class="stxt"></span></span>'+
-        '<span class="dep" style="text-align:right"><span class="mn"></span> <small>MIN</small></span>';
-      rowsEl.appendChild(el);
-    }
-    el.querySelector(".mn").textContent = mins;
-    const stxt = el.querySelector(".stxt");
-    stxt.textContent = st.txt;
-    el.querySelector(".st").className = "st "+st.cls;
-    el.classList.toggle("boarding", st.cls==="brd");
-    /* order */
-    rowsEl.appendChild(el); /* re-append in sorted order */
-    if(first || !el.classList.contains("in")){
-      setTimeout(()=>el.classList.add("in"), first ? 300+i*70 : 10);
-    }
-  });
-  /* departed rows lift off */
-  Array.from(rowsEl.children).forEach(el=>{
-    if(!board.find(r=>r.key===el.dataset.key)){
-      el.classList.add("out");
-      setTimeout(()=>el.remove(), 450);
-    }
+    const el = document.createElement("div");
+    el.className = "row"+(st.cls==="brd"?" boarding":"");
+    el.dataset.key = r.key; el.dataset.at = r.at; el.dataset.delay = r.delay;
+    el.innerHTML =
+      '<span class="rt" style="background:'+HC.routeColor(r.route)+'">'+r.route+'</span>'+
+      '<span class="dest"><span class="rname">'+HC.routeName(r.route)+'</span>'+
+      '<span class="stop">at '+r.name.toLowerCase()+'</span></span>'+
+      '<span class="st '+st.cls+'"><span class="stxt">'+st.txt+'</span></span>'+
+      '<span class="dep" style="text-align:right"><span class="mn">'+mins+'</span> <small>MIN</small></span>';
+    rowsEl.appendChild(el);
+    setTimeout(()=>el.classList.add("in"), (first?300:80)+i*60);
   });
 }
 
 function tick(){
-  /* local countdown tick every 5s: refresh minute numbers + status, no rebuild */
-  if(HC.LIVE && (Date.now()-HC.LIVE.ts*1000) > 240000) return; /* held board on a stale feed */
+  /* countdown between refreshes; a row whose time has come lifts off the board */
+  if(HC.LIVE && (Date.now()-HC.LIVE.ts*1000) > 240000) return;
   const now = Date.now()/1000;
   Array.from(rowsEl.children).forEach(el=>{
-    const r = board.find(x=>x.key===el.dataset.key); if(!r) return;
-    const mins = Math.max(0, Math.round((r.at-now)/60));
-    el.querySelector(".mn").textContent = mins;
-    const st = statFor(r);
-    el.querySelector(".stxt").textContent = st.txt;
-    el.querySelector(".st").className = "st "+st.cls;
+    const at = parseFloat(el.dataset.at||"0"); if(!at) return;
+    const delay = parseFloat(el.dataset.delay||"0");
+    const mins = Math.max(0, Math.round((at-now)/60));
+    const mn = el.querySelector(".mn"); if(mn) mn.textContent = mins;
+    const st = statFor({at:at, delay:delay});
+    const stxt = el.querySelector(".stxt"); if(stxt) stxt.textContent = st.txt;
+    const stc = el.querySelector(".st"); if(stc) stc.className = "st "+st.cls;
     el.classList.toggle("boarding", st.cls==="brd");
-  });
-  /* rows whose time has fully come lift off */
-  board.filter(r=>r.at-now < -8).forEach(r=>{
-    const el = rowsEl.querySelector('[data-key="'+r.key+'"]');
-    if(el && !el.classList.contains("out")){ el.classList.add("out"); setTimeout(()=>el.remove(),450); }
+    if(at-now < -8 && !el.classList.contains("out")){
+      el.classList.add("out");
+      setTimeout(()=>el.remove(), 450);
+    }
   });
 }
 
@@ -241,7 +214,6 @@ function status(live){
 (async function boot(){
   S = await HC.loadStatic();
   const live = await HC.loadLive();
-  board = [];
   render(true); status(live);
   setInterval(tick, 5000);
   setInterval(async ()=>{
