@@ -82,6 +82,10 @@ h1{font-family:Caveat,cursive;font-weight:700;font-size:48px;line-height:1;margi
   border:none;background:none;border-bottom:1px dashed var(--red);padding:2px 0;cursor:pointer;
   font-family:inherit;transition:opacity 120ms var(--ease)}
 .her .flip:active{opacity:.5}
+.her .follow{margin-left:16px;font-size:10px;letter-spacing:.1em;color:var(--ink);
+  text-decoration:none;border-bottom:1px dashed var(--ink);padding:2px 0;
+  transition:opacity 120ms var(--ease)}
+.her .follow:active{opacity:.5}
 
 footer{margin-top:34px;text-align:center;font-size:10px;color:var(--muted);line-height:1.9}
 </style>
@@ -131,6 +135,7 @@ footer{margin-top:34px;text-align:center;font-size:10px;color:var(--muted);line-
   </div>
   <div class="steps" id="s-steps"></div>
   <button class="flip" id="s-flip">heading home instead? &rarr;</button>
+  <a class="follow" id="s-follow" style="display:none">follow the bus &rarr;</a>
 </div>
 
 <div class="her" id="her-lake">
@@ -146,6 +151,7 @@ footer{margin-top:34px;text-align:center;font-size:10px;color:var(--muted);line-
   </div>
   <div class="steps" id="l-steps"></div>
   <button class="flip" id="l-flip">heading home instead? &rarr;</button>
+  <a class="follow" id="l-follow" style="display:none">follow the bus &rarr;</a>
 </div>
 
 <footer>chalk washes off. so do these numbers, every 30 seconds.<br>
@@ -235,16 +241,23 @@ function renderHer(key, live){
       HC.countUp(document.getElementById(pre+"-mnum"), mins);
     }
     whatEl.innerHTML = "the <b>"+p[0]+"</b> reaches her corner at <b>"+fmtClock(p[2])+"</b><br>there about <b>"+fmtClock(p[2]+cfg.travel*60)+"</b>";
-    const prog = herProgress(cfg, herVehicle(cfg, p, live));
+    const liveVeh = herVehicle(cfg, p, live);
+    const prog = herProgress(cfg, liveVeh);
     if(prog !== null){
       herDots[key].target = prog;
       if(!herDots[key].shown){ herDots[key].cur = prog; herDots[key].shown = true; }
       dot.style.opacity = "1";
     } else dot.style.opacity = "0";
+    const fol = document.getElementById(pre+"-follow");
+    if(liveVeh){
+      fol.style.display = "inline-block";
+      fol.href = "system.html?follow="+key+"&dir="+herState[key];
+    } else fol.style.display = "none";
   } else {
     minsEl.innerHTML = '--<small> MIN</small>'; minsEl._set = null;
     whatEl.innerHTML = "no live "+cfg.routes.join(" or ")+" listed at her corner yet - the next one announces itself a few minutes out.";
     dot.style.opacity = "0"; herDots[key].shown = false;
+    document.getElementById(pre+"-follow").style.display = "none";
   }
 }
 function herFrame(){
