@@ -56,6 +56,21 @@ h1{font-family:Caveat,cursive;font-weight:700;font-size:40px;line-height:1}
 #stage.dim .veh.sel{opacity:1}
 #mapcap{display:flex;justify-content:space-between;padding:8px 12px;border-top:1px dashed var(--hair);
   font-size:9px;letter-spacing:.1em;color:var(--muted)}
+#zoombtn{position:absolute;top:10px;right:10px;z-index:5;background:var(--card);
+  border:1.5px solid var(--ink);padding:7px 10px;font-family:inherit;font-size:9px;
+  letter-spacing:.12em;color:var(--ink);cursor:pointer;
+  transition:transform 120ms var(--ease),opacity 240ms var(--ease)}
+#zoombtn:active{transform:scale(.95)}
+#helenmark{opacity:0;transition:opacity 420ms var(--ease)}
+#helenmark.on{opacity:1}
+#followcap{position:absolute;top:10px;left:10px;z-index:5;background:var(--card);
+  border:1.5px solid var(--ink);padding:7px 10px;font-size:9px;letter-spacing:.12em;
+  color:var(--ink);display:none;align-items:center;gap:8px}
+#followcap.on{display:flex}
+#followcap a{color:var(--red);text-decoration:none;border-bottom:1px dashed var(--red)}
+.veh.followbus{opacity:1!important}
+.veh.dimmed{opacity:.12}
+.fol-ring{fill:none;stroke:#c84b3c;stroke-width:2.2}
 #mapcap b{color:var(--ink);font-weight:500}
 
 #chips{display:flex;gap:8px;overflow-x:auto;padding:12px 2px 6px;scrollbar-width:none}
@@ -112,6 +127,8 @@ footer{margin-top:30px;text-align:center;font-size:10px;color:var(--muted);line-
 </nav>
 
 <div id="mapcard">
+  <button id="zoombtn">THE WHOLE CITY</button>
+  <div id="followcap"><span id="followtxt"></span><a href="system.html">STOP</a></div>
   <div id="stage"><svg id="map" preserveAspectRatio="xMidYMid meet"></svg></div>
   <div id="mapcap"><span>CHALK LINES = ROUTES RUNNING NOW · TAP ONE</span><span id="maplive"><b>--</b> MOVING</span></div>
 </div>
@@ -160,14 +177,17 @@ function buildMap(){
   })));
   fit = HC.fitter(a, w, h, 18);
   svg.innerHTML = "";
-  const gGhost = document.createElementNS(NS,"g"); svg.appendChild(gGhost);
-  const gLive  = document.createElementNS(NS,"g"); svg.appendChild(gLive);
-  const gVeh   = document.createElementNS(NS,"g"); gVeh.id="gveh"; svg.appendChild(gVeh);
+  const gWorld = document.createElementNS(NS,"g"); gWorld.id = "world"; svg.appendChild(gWorld);
+  const gGhost = document.createElementNS(NS,"g"); gWorld.appendChild(gGhost);
+  const gLive  = document.createElementNS(NS,"g"); gWorld.appendChild(gLive);
+  const gVeh   = document.createElementNS(NS,"g"); gVeh.id="gveh"; gWorld.appendChild(gVeh);
+  const gMark  = document.createElementNS(NS,"g"); gMark.id="helenmark"; gWorld.appendChild(gMark);
+  buildHelenMark(gMark);
   let i=0;
   Object.keys(S.shapes).forEach(rid=>{
     const d = pathFor(rid); if(!d) return;
     const p = document.createElementNS(NS,"path");
-    p.setAttribute("d",d); p.setAttribute("class","route-ghost");
+    p.setAttribute("d",d); p.setAttribute("class","route-ghost"); p.setAttribute("vector-effect","non-scaling-stroke");
     gGhost.appendChild(p);
     HC.drawOn(p, 300, i*10); i++;
   });
@@ -181,7 +201,7 @@ function paintLive(gLive, live){
   rts.forEach((rid,i)=>{
     const d = pathFor(rid); if(!d) return;
     const p = document.createElementNS(NS,"path");
-    p.setAttribute("d",d); p.setAttribute("class","route-live");
+    p.setAttribute("d",d); p.setAttribute("class","route-live"); p.setAttribute("vector-effect","non-scaling-stroke");
     p.style.stroke = HC.routeColor(rid); p.dataset.rid = rid;
     p.addEventListener("click",()=>select(rid));
     gLive.appendChild(p);
@@ -195,7 +215,7 @@ function paintLive(gLive, live){
       shapeCache["HOP"] = {pts, m};
       const d = pts.map((p,i)=>{const q=fit(p[1],p[0]); return (i?"L":"M")+q.x.toFixed(1)+","+q.y.toFixed(1);}).join("");
       const p = document.createElementNS(NS,"path");
-      p.setAttribute("d",d); p.setAttribute("class","route-live");
+      p.setAttribute("d",d); p.setAttribute("class","route-live"); p.setAttribute("vector-effect","non-scaling-stroke");
       p.style.stroke = HC.routeColor("HOP"); p.dataset.rid = "HOP";
       p.addEventListener("click",()=>select("HOP"));
       gLive.appendChild(p);
@@ -220,7 +240,7 @@ function paintVehicles(gVeh, live, first){
       g.appendChild(cc);
       g.addEventListener("click",()=>select(v.route));
       gVeh.appendChild(g);
-      if(first){ g.style.opacity="0"; setTimeout(()=>{g.style.opacity="1";}, 600+Math.random()*800); }
+      if(first && !FOL){ g.style.opacity="0"; setTimeout(()=>{g.style.opacity="1";}, 600+Math.random()*800); }
     }
     g.dataset.fracKey = key;
   });
@@ -240,7 +260,7 @@ function paintVehicles(gVeh, live, first){
       g.appendChild(r);
       g.addEventListener("click",()=>select("HOP"));
       gVeh.appendChild(g);
-      if(first){ g.style.opacity="0"; setTimeout(()=>{g.style.opacity="1";}, 600+Math.random()*800); }
+      if(first && !FOL){ g.style.opacity="0"; setTimeout(()=>{g.style.opacity="1";}, 600+Math.random()*800); }
     }
     g.dataset.fracKey = key;
   });
@@ -256,7 +276,9 @@ function frame(){
       const c = shapeCache[g.dataset.rid]; if(!c) return;
       const ll = HC.pointAtFrac(c.pts, c.m, f);
       const q = fit(ll[1], ll[0]);
-      g.setAttribute("transform","translate("+q.x.toFixed(2)+","+q.y.toFixed(2)+")");
+      const zk = (document.getElementById("world")._zt || {k:1}).k;
+      const inv = 1/Math.sqrt(zk); /* dots grow a little at zoom, not into blobs */
+      g.setAttribute("transform","translate("+q.x.toFixed(2)+","+q.y.toFixed(2)+") scale("+inv.toFixed(3)+")");
     });
   }
   requestAnimationFrame(frame);
@@ -321,6 +343,7 @@ function closeSheet(){
   document.getElementById("sheet").classList.remove("open");
 }
 document.getElementById("sx").addEventListener("click", closeSheet);
+document.getElementById("zoombtn").addEventListener("click", ()=>flyTo(!zoomed));
 document.getElementById("map").addEventListener("click", e=>{ if(e.target.id==="map") closeSheet(); });
 
 function statusLine(live){
@@ -332,6 +355,173 @@ function statusLine(live){
   if(mv) mv.textContent = live.vehicles.length + (live.hop||[]).length;
 }
 
+/* ---- Helen's downtown is the default view; expand to the whole city ---- */
+const HELEN_LL = [43.03873, -87.91116]; /* 740 N Plankinton */
+const ZOOM_BOUNDS = [43.0305, 43.0465, -87.9360, -87.8985]; /* minLat,maxLat,minLon,maxLon: downtown + Marquette */
+let zoomed = true, zoomAnim = null;
+function buildHelenMark(g){
+  const q = fit(HELEN_LL[0], HELEN_LL[1]);
+  g._anchor = q;
+  const c = document.createElementNS(NS,"circle");
+  c.setAttribute("cx","0"); c.setAttribute("cy","0"); c.setAttribute("r","7");
+  c.setAttribute("fill","none"); c.setAttribute("stroke","#c84b3c"); c.setAttribute("stroke-width","1.6");
+  c.setAttribute("vector-effect","non-scaling-stroke");
+  const t = document.createElementNS(NS,"text");
+  t.setAttribute("x","11"); t.setAttribute("y","3");
+  t.setAttribute("style","font-family:'IBM Plex Mono',monospace;font-size:9px;fill:#c84b3c;letter-spacing:.08em");
+  t.textContent = "HER CORNER";
+  g.appendChild(c); g.appendChild(t);
+}
+function zoomTransform(){
+  const p0 = fit(ZOOM_BOUNDS[1], ZOOM_BOUNDS[2]);
+  const p1 = fit(ZOOM_BOUNDS[0], ZOOM_BOUNDS[3]);
+  const stage = document.getElementById("stage");
+  const w = stage.clientWidth, h = stage.clientHeight;
+  const dw = p1.x-p0.x, dh = p1.y-p0.y;
+  const k = Math.min(w/dw, h/dh) * 0.90;
+  const tx = (w - dw*k)/2 - p0.x*k;
+  const ty = (h - dh*k)/2 - p0.y*k;
+  return {k, tx, ty};
+}
+function applyZoom(target){
+  const g = document.getElementById("world");
+  g._zt = target;
+  g.setAttribute("transform","translate("+target.tx.toFixed(1)+","+target.ty.toFixed(1)+") scale("+target.k.toFixed(3)+")");
+  const m = document.getElementById("helenmark");
+  if(m && m._anchor){
+    const inv = 1/target.k;
+    m.setAttribute("transform","translate("+m._anchor.x.toFixed(1)+","+m._anchor.y.toFixed(1)+") scale("+inv.toFixed(3)+")");
+  }
+}
+function flyTo(on){
+  zoomed = on;
+  const target = on ? zoomTransform() : {k:1, tx:0, ty:0};
+  const g = document.getElementById("world");
+  const from = g._zt || {k:1, tx:0, ty:0};
+  if(zoomAnim) cancelAnimationFrame(zoomAnim);
+  document.getElementById("helenmark").classList.toggle("on", on);
+  document.getElementById("zoombtn").textContent = on ? "THE WHOLE CITY" : "BACK TO DOWNTOWN";
+  if(HC.FROZEN){ applyZoom(target); return; }
+  const start = performance.now(), dur = HC.MOTION.draw;
+  function step(now){
+    const t = Math.min(1,(now-start)/dur), e = HC.easeOutCubic(t);
+    applyZoom({
+      k: from.k + (target.k-from.k)*e,
+      tx: from.tx + (target.tx-from.tx)*e,
+      ty: from.ty + (target.ty-from.ty)*e
+    });
+    if(t<1) zoomAnim = requestAnimationFrame(step); else zoomAnim = null;
+  }
+  zoomAnim = requestAnimationFrame(step);
+}
+
+/* ---- follow-along: one bus, her trip, live ---- */
+const FOL_HER = {
+  school: {
+    out: { stop:"5", routes:["14","30"], alight:"9642", to:"wisconsin & plankinton" },
+    back:{ stop:"9642", routes:["14","30"], alight:"5", to:"the N12 station" }
+  },
+  lake: {
+    out: { stop:"63", routes:["14"], alight:"4391", to:"wisconsin & plankinton" },
+    back:{ stop:"4391", routes:["14"], alight:"63", to:"prospect & mason" }
+  }
+};
+const FOL_Q = new URLSearchParams(location.search);
+const FOL = (function(){
+  const key = FOL_Q.get("follow");
+  if(!key || !FOL_HER[key]) return null;
+  const dir = FOL_Q.get("dir")==="back" ? "back" : "out";
+  return { key, cfg: FOL_HER[key][dir] };
+})();
+let folVehId = null;
+
+function folPrediction(live){
+  if(!FOL) return null;
+  const list = (live.stops && live.stops[FOL.cfg.stop]) || [];
+  const now = Date.now()/1000;
+  const hits = list.filter(p=>FOL.cfg.routes.indexOf(p[0])>=0 && p[2]-now>-30).sort((a,b)=>a[2]-b[2]);
+  return hits[0] || null;
+}
+function folVehicle(live, p){
+  if(!p) return null;
+  return live.vehicles.find(v=>FOL.cfg.routes.indexOf(v.route)>=0 &&
+    (v.next||[]).some(n=>String(n.stop)===String(FOL.cfg.stop) && Math.abs(n.at-p[2])<8)) || null;
+}
+function folCameraBounds(v){
+  /* the segment of the primary route between board and alight stops, plus the bus itself */
+  const c = shapePts(FOL.cfg.routes[0]); if(!c) return null;
+  const st = S._stopMap[FOL.cfg.stop], al = S._stopMap[FOL.cfg.alight];
+  if(!st || !al) return null;
+  const f0 = HC.projectFrac(c.pts, c.m, st.lat, st.lon);
+  const f1 = HC.projectFrac(c.pts, c.m, al.lat, al.lon);
+  const lo = Math.min(f0,f1), hi = Math.max(f0,f1);
+  let a=[90,-90,0,-180];
+  const n = 40;
+  for(let i=0;i<=n;i++){
+    const ll = HC.pointAtFrac(c.pts, c.m, lo+(hi-lo)*i/n);
+    a[0]=Math.min(a[0],ll[1]); a[1]=Math.max(a[1],ll[1]); a[2]=Math.min(a[2],ll[0]); a[3]=Math.max(a[3],ll[0]);
+  }
+  if(v){ a[0]=Math.min(a[0],v.lat); a[1]=Math.max(a[1],v.lat); a[2]=Math.min(a[2],v.lon); a[3]=Math.max(a[3],v.lon); }
+  const plat=(a[1]-a[0])*.35 + 0.001, plon=(a[3]-a[2])*.35 + 0.001;
+  return [a[0]-plat, a[1]+plat, a[2]-plon, a[3]+plon];
+}
+function folApply(live, first){
+  const cap = document.getElementById("followcap");
+  cap.classList.add("on");
+  document.getElementById("chips").style.display = "none";
+  document.getElementById("zoombtn").style.display = "none";
+  /* isolate her routes, dim the rest */
+  document.getElementById("stage").classList.add("dim");
+  document.querySelectorAll(".route-live").forEach(p=>{
+    p.classList.toggle("sel", FOL.cfg.routes.indexOf(p.dataset.rid)>=0);
+  });
+  /* find the bus */
+  const p = folPrediction(live);
+  const v = folVehicle(live, p);
+  folVehId = v ? "b"+v.id : null;
+  document.querySelectorAll(".veh").forEach(g=>{
+    g.classList.remove("followbus","dimmed","sel");
+    if(folVehId && g.id===folVehId){ g.classList.add("followbus"); g.style.opacity = "1"; }
+    else { g.classList.add("dimmed"); g.style.opacity = "0.12"; }
+  });
+  const txt = document.getElementById("followtxt");
+  if(p && v){
+    const mins = Math.max(0, Math.round((p[2]-Date.now()/1000)/60));
+    txt.textContent = "FOLLOWING THE "+v.route+" · "+mins+" MIN FROM "+FOL.cfg.to.toUpperCase();
+  } else if(p){
+    txt.textContent = "THE "+p[0]+" HASN'T CHECKED IN YET · WATCH THIS SPACE";
+  } else {
+    txt.textContent = "NO LIVE BUS LISTED YET · WATCH THIS SPACE";
+  }
+  /* camera on the trip segment, capped so it stays a map not a microscope */
+  const b = folCameraBounds(v);
+  if(b){
+    const stage = document.getElementById("stage");
+    const w = stage.clientWidth, h = stage.clientHeight;
+    const p0 = fit(b[1], b[2]), p1 = fit(b[0], b[3]);
+    const dw = p1.x-p0.x, dh = p1.y-p0.y;
+    const k = Math.min(Math.min(w/dw, h/dh) * 0.82, 7);
+    const tx = (w - dw*k)/2 - p0.x*k;
+    const ty = (h - dh*k)/2 - p0.y*k;
+    applyZoom({k, tx, ty});
+  }
+}
+/* ring around the followed bus, drawn each frame */
+function folFrame(){
+  if(FOL && folVehId){
+    const g = document.getElementById(folVehId);
+    if(g && !g.querySelector(".fol-ring")){
+      const r = document.createElementNS(NS,"circle");
+      r.setAttribute("class","fol-ring"); r.setAttribute("r","9");
+      g.insertBefore(r, g.firstChild);
+    }
+    document.querySelectorAll(".veh").forEach(o=>{
+      if(o.id!==folVehId){ const r=o.querySelector(".fol-ring"); if(r) r.remove(); }
+    });
+  }
+  requestAnimationFrame(folFrame);
+}
+
 async function boot(){
   S = await HC.loadStatic();
   const live = await HC.loadLive();
@@ -341,13 +531,20 @@ async function boot(){
   paintVehicles(gVeh, live, true);
   renderChips(rts, live);
   statusLine(live);
+  if(FOL){ folApply(live, true); }
+  else {
+    applyZoom(zoomTransform());
+    document.getElementById("helenmark").classList.add("on");
+  }
   requestAnimationFrame(frame);
+  requestAnimationFrame(folFrame);
   setInterval(async ()=>{
     try{
       const l2 = await HC.loadLive();
       paintVehicles(document.getElementById("gveh"), l2, false);
       statusLine(l2);
-      if(sel) select(sel);
+      if(FOL) folApply(l2, false);
+      else if(sel) select(sel);
     }catch(e){}
   }, 30000);
 }
@@ -355,4 +552,4 @@ boot();
 })();
 </script>
 </body>
-</html>
+  </html>
