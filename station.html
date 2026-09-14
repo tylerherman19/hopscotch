@@ -142,14 +142,16 @@ window.addEventListener("load", ()=>{
 
 function collect(live){
   const now = Date.now()/1000;
-  const rows = [];
+  const byRoute = {}; /* one row per route: a real board spreads across lines */
   live.vehicles.forEach(v=>{
     if(!v.next || !v.next[0]) return;
     const n = v.next[1] || v.next[0]; /* the stop after next: a board with spread */
     if(n.at - now < -20) return; /* only what has not left yet */
-    rows.push({key:v.id+"-"+n.stop, route:v.route, stop:n.stop, name:n.name,
-      at:n.at, delay:v.delay||0, bus:v.id});
+    const cur = byRoute[v.route];
+    if(!cur || n.at < cur.at) byRoute[v.route] = {key:v.id+"-"+n.stop, route:v.route, stop:n.stop, name:n.name,
+      at:n.at, delay:v.delay||0, bus:v.id};
   });
+  const rows = Object.values(byRoute);
   rows.sort((a,b)=>a.at-b.at);
   return rows.slice(0,18);
 }
