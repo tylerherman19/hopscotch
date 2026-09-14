@@ -49,12 +49,15 @@ h1{font-family:Caveat,cursive;font-weight:700;font-size:40px;line-height:1}
 #mapbox .maplibregl-canvas{outline:none}
 #overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3}
 #overlay.moving *{transition:none!important}
-.route-ghost{fill:none;stroke:#c9c2b2;stroke-width:1;stroke-linecap:round;opacity:.7}
-.route-live{fill:none;stroke-width:2.6;stroke-linecap:round;pointer-events:stroke;cursor:pointer;
+.route-ghost{fill:none;stroke:#b6ac97;stroke-width:1.4;stroke-linecap:round;opacity:.9}
+.route-live{fill:none;stroke-width:3;stroke-linecap:round;pointer-events:stroke;cursor:pointer;
   transition:opacity 420ms var(--ease),stroke-width 240ms var(--ease)}
+.route-case{fill:none;stroke:#f7f3ea;stroke-width:5.6;stroke-linecap:round;opacity:.95;pointer-events:none}
 .veh{transition:opacity 240ms var(--ease);pointer-events:auto;cursor:pointer}
-.veh circle.dot{stroke:#f4efe3;stroke-width:1.6}
+.veh circle.dot{stroke:#f4efe3;stroke-width:1.8}
 #stage.dim .route-live{opacity:.07}
+#stage.dim .route-case{opacity:.08}
+#stage.dim .route-case.sel{opacity:.95}
 #stage.dim .route-live.sel{opacity:1;stroke-width:3.8}
 #stage.dim .veh{opacity:.1}
 #stage.dim .veh.sel{opacity:1}
@@ -135,7 +138,7 @@ footer{margin-top:30px;text-align:center;font-size:10px;color:var(--muted);line-
     <div id="mapbox"></div>
     <svg id="overlay" preserveAspectRatio="none"></svg>
   </div>
-  <div id="mapcap"><span>CHALK LINES = ROUTES RUNNING NOW · TAP ONE</span><span id="maplive"><b>--</b> MOVING</span></div>
+  <div id="mapcap"><span>PALE = ALL ROUTES · CHALK = LIVE · TAP ONE</span><span id="maplive"><b>--</b> MOVING</span></div>
 </div>
 
 <div id="chips"></div>
@@ -179,10 +182,10 @@ const FOL = (function(){
 let folVehId = null;
 
 const HELEN_LL = [43.03873, -87.91116]; /* 740 N Plankinton */
-const DOWNTOWN = { center: [HELEN_LL[1], HELEN_LL[0]], zoom: 14.15 };
+const DOWNTOWN_B = [[-87.9335, 43.0305], [-87.8755, 43.0492]]; /* N12 station to Prospect & Mason, her whole downtown world */
 
 let S, map, tracker = HC.makeTracker(), sel = null, shapeCache = {};
-let gGhost, gLive, gVeh, gMark, zoomed = true, renderQueued = false;
+let gGhost, gCase, gLive, gVeh, gMark, zoomed = true, renderQueued = false;
 
 function shapePts(rid){
   if(shapeCache[rid]) return shapeCache[rid];
@@ -213,6 +216,7 @@ function buildOverlay(){
   svg.setAttribute("viewBox","0 0 "+stage.clientWidth+" "+stage.clientHeight);
   svg.innerHTML = "";
   gGhost = document.createElementNS(NS,"g"); svg.appendChild(gGhost);
+  gCase  = document.createElementNS(NS,"g"); svg.appendChild(gCase);
   gLive  = document.createElementNS(NS,"g"); svg.appendChild(gLive);
   gVeh   = document.createElementNS(NS,"g"); svg.appendChild(gVeh);
   gMark  = document.createElementNS(NS,"g"); gMark.id = "helenmark"; svg.appendChild(gMark);
@@ -234,6 +238,7 @@ function buildOverlay(){
 }
 function renderOverlay(){
   if(gGhost) Array.from(gGhost.children).forEach(p=>{ const d = pathFor(p.dataset.rid); if(d) p.setAttribute("d", d); });
+  if(gCase) Array.from(gCase.children).forEach(p=>{ const d = pathFor(p.dataset.rid); if(d) p.setAttribute("d", d); });
   if(gLive) Array.from(gLive.children).forEach(p=>{ const d = pathFor(p.dataset.rid); if(d) p.setAttribute("d", d); });
   if(gMark){ const q = px(HELEN_LL[0], HELEN_LL[1]); gMark.setAttribute("transform","translate("+q.x.toFixed(1)+","+q.y.toFixed(1)+")"); }
 }
@@ -245,6 +250,7 @@ function queueRender(){
 
 function paintLive(live, first){
   gLive.innerHTML = "";
+  gCase.innerHTML = "";
   const seen = {};
   live.vehicles.forEach(v=>{ seen[v.route]=true; });
   const rts = Object.keys(seen).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
@@ -254,8 +260,10 @@ function paintLive(live, first){
     p.setAttribute("class","route-live");
     p.style.stroke = HC.routeColor(rid); p.dataset.rid = rid;
     p.addEventListener("click",()=>select(rid));
-    gLive.appendChild(p);
-    if(first) HC.drawOn(p, 500, 350+i*55);
+    const cs = document.createElementNS(NS,"path");
+    cs.setAttribute("class","route-case"); cs.dataset.rid = rid;
+    gCase.appendChild(cs); gLive.appendChild(p);
+    if(first){ HC.drawOn(cs, 500, 350+i*55); HC.drawOn(p, 500, 350+i*55); }
   });
   if(live.hop && live.hop.length){
     const stops = S.hop.stops.slice().sort((a,b)=>a.id-b.id);
@@ -267,8 +275,10 @@ function paintLive(live, first){
       p.setAttribute("class","route-live");
       p.style.stroke = HC.routeColor("HOP"); p.dataset.rid = "HOP";
       p.addEventListener("click",()=>select("HOP"));
-      gLive.appendChild(p);
-      if(first) HC.drawOn(p, 500, 350+rts.length*55);
+      const cs = document.createElementNS(NS,"path");
+      cs.setAttribute("class","route-case"); cs.dataset.rid = "HOP";
+      gCase.appendChild(cs); gLive.appendChild(p);
+      if(first){ HC.drawOn(cs, 500, 350+rts.length*55); HC.drawOn(p, 500, 350+rts.length*55); }
     }
   }
   renderOverlay();
@@ -286,7 +296,7 @@ function paintVehicles(live, first){
       g = document.createElementNS(NS,"g");
       g.setAttribute("class","veh"); g.id = key; g.dataset.rid = v.route;
       const cc = document.createElementNS(NS,"circle");
-      cc.setAttribute("class","dot"); cc.setAttribute("r","5"); cc.style.fill = HC.routeColor(v.route);
+      cc.setAttribute("class","dot"); cc.setAttribute("r","6.5"); cc.style.fill = HC.routeColor(v.route);
       g.appendChild(cc);
       g.addEventListener("click",()=>select(v.route));
       gVeh.appendChild(g);
@@ -304,8 +314,8 @@ function paintVehicles(live, first){
       g = document.createElementNS(NS,"g");
       g.setAttribute("class","veh"); g.id = key; g.dataset.rid = "HOP";
       const r = document.createElementNS(NS,"rect");
-      r.setAttribute("width","9"); r.setAttribute("height","9");
-      r.setAttribute("x","-4.5"); r.setAttribute("y","-4.5");
+      r.setAttribute("width","11"); r.setAttribute("height","11");
+      r.setAttribute("x","-5.5"); r.setAttribute("y","-5.5");
       r.style.fill = HC.routeColor("HOP"); r.style.stroke="#f4efe3"; r.style.strokeWidth="1.6";
       g.appendChild(r);
       g.addEventListener("click",()=>select("HOP"));
@@ -358,7 +368,7 @@ function arrivalsFor(rid, live){
 function select(rid){
   sel = rid;
   document.getElementById("stage").classList.add("dim");
-  document.querySelectorAll(".route-live").forEach(p=>p.classList.toggle("sel", p.dataset.rid===rid));
+  document.querySelectorAll(".route-live,.route-case").forEach(p=>p.classList.toggle("sel", p.dataset.rid===rid));
   document.querySelectorAll(".veh").forEach(g=>g.classList.toggle("sel", g.dataset.rid===rid));
   document.querySelectorAll(".chip").forEach(c=>c.classList.toggle("sel", c.dataset.rid===rid));
   const sheet = document.getElementById("sheet");
@@ -397,7 +407,7 @@ function flyTo(on){
   document.getElementById("helenmark").classList.toggle("on", on);
   document.getElementById("zoombtn").textContent = on ? "THE WHOLE CITY" : "BACK TO DOWNTOWN";
   if(on){
-    map.flyTo({ center: DOWNTOWN.center, zoom: DOWNTOWN.zoom, duration: HC.MOTION.draw, easing: easeOC });
+    map.fitBounds(DOWNTOWN_B, { padding: 0, duration: HC.MOTION.draw, easing: easeOC });
   } else {
     let b = null;
     Object.keys(S.shapes).forEach(rid=>{
@@ -429,7 +439,7 @@ function folApply(live, first){
   document.getElementById("chips").style.display = "none";
   document.getElementById("zoombtn").style.display = "none";
   document.getElementById("stage").classList.add("dim");
-  document.querySelectorAll(".route-live").forEach(p=>{
+  document.querySelectorAll(".route-live,.route-case").forEach(p=>{
     p.classList.toggle("sel", FOL.cfg.routes.indexOf(p.dataset.rid)>=0);
   });
   const p = folPrediction(live);
@@ -472,7 +482,7 @@ function folFrame(){
     const g = gVeh ? gVeh.querySelector('[id="'+folVehId+'"]') : null;
     if(g && !g.querySelector(".fol-ring")){
       const r = document.createElementNS(NS,"circle");
-      r.setAttribute("class","fol-ring"); r.setAttribute("r","10");
+      r.setAttribute("class","fol-ring"); r.setAttribute("r","12");
       g.insertBefore(r, g.firstChild);
     }
     if(gVeh) Array.from(gVeh.children).forEach(o=>{
@@ -496,8 +506,7 @@ async function boot(){
   map = new maplibregl.Map({
     container: "mapbox",
     style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-    center: DOWNTOWN.center,
-    zoom: DOWNTOWN.zoom,
+    bounds: DOWNTOWN_B,
     cooperativeGestures: true,
     attributionControl: { compact: true }
   });
