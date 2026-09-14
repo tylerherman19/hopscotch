@@ -47,7 +47,7 @@ function drawOn(path, dur, delay, done){
 }
 
 /* ---- data ---- */
-const LIVE_URL = "https://raw.githubusercontent.com/tylerherman19/hopscotch/data/live.json";
+const LIVE_URL = "https://raw.githack.com/tylerherman19/hopscotch/data/live.json";
 let STATIC = null, LIVE = null;
 
 async function loadStatic(){
