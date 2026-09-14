@@ -194,7 +194,7 @@ let folVehId = null;
 
 const HOT = ["14","30","HOP"]; /* her lines */
 const HELEN_LL = [43.03873, -87.91116]; /* 740 N Plankinton */
-const DOWNTOWN_B = [[-87.9335, 43.0305], [-87.8755, 43.0492]]; /* N12 station to Prospect & Mason, her whole downtown world */
+const DOWNTOWN_B = [[-87.926, 43.0295], [-87.896, 43.0495]]; /* his pick: downtown core, Westown to the lakefront */
 
 let S, map, tracker = HC.makeTracker(), sel = null, shapeCache = {};
 let gGhost, gCase, gLive, gVeh, gMark, zoomed = true, renderQueued = false;
@@ -337,9 +337,10 @@ function paintVehicles(live, first){
       g = document.createElementNS(NS,"g");
       g.setAttribute("class","veh"+(HOT.indexOf("HOP")>=0?" hotr":"")); g.id = key; g.dataset.rid = "HOP";
       const r = document.createElementNS(NS,"rect");
-      r.setAttribute("width","11"); r.setAttribute("height","11");
-      r.setAttribute("x","-5.5"); r.setAttribute("y","-5.5");
-      r.style.fill = HC.routeColor("HOP"); r.style.stroke="#f4efe3"; r.style.strokeWidth="1.6";
+      r.setAttribute("width","12"); r.setAttribute("height","12");
+      r.setAttribute("x","-6"); r.setAttribute("y","-6");
+      r.setAttribute("transform","rotate(45)");
+      r.style.fill = HC.routeColor("HOP"); r.style.stroke="#f4efe3"; r.style.strokeWidth="1.8";
       g.appendChild(r);
       g.addEventListener("click",()=>select("HOP"));
       gVeh.appendChild(g);
