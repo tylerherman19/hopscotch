@@ -61,6 +61,16 @@ h1{font-family:Caveat,cursive;font-weight:700;font-size:40px;line-height:1}
 #stage.dim .route-live.sel{opacity:1;stroke-width:3.8}
 #stage.dim .veh{opacity:.1}
 #stage.dim .veh.sel{opacity:1}
+#stage.hot .route-ghost{opacity:.04}
+#stage.hot .route-live:not(.hotr){opacity:0}
+#stage.hot .route-case:not(.hotr){opacity:0}
+#stage.hot .veh:not(.hotr){opacity:0}
+#hotbtn{position:absolute;top:10px;left:10px;z-index:6;background:var(--card);
+  border:1.5px solid var(--ink);padding:7px 10px;font-family:inherit;font-size:9px;
+  letter-spacing:.12em;color:var(--ink);cursor:pointer;
+  transition:transform 120ms var(--ease),opacity 240ms var(--ease),background 240ms var(--ease)}
+#hotbtn:active{transform:scale(.95)}
+#stage.hot ~ #hotbtn, #hotbtn.on{background:var(--ink);color:var(--paper)}
 .fol-ring{fill:none;stroke:#c84b3c;stroke-width:2.2}
 #mapcap{display:flex;justify-content:space-between;padding:8px 12px;border-top:1px dashed var(--hair);
   font-size:9px;letter-spacing:.1em;color:var(--muted)}
@@ -133,6 +143,7 @@ footer{margin-top:30px;text-align:center;font-size:10px;color:var(--muted);line-
 
 <div id="mapcard">
   <button id="zoombtn">THE WHOLE CITY</button>
+  <button id="hotbtn">HOT ROUTES</button>
   <div id="followcap"><span id="followtxt"></span><a href="system.html">STOP</a></div>
   <div id="stage">
     <div id="mapbox"></div>
@@ -181,6 +192,7 @@ const FOL = (function(){
 })();
 let folVehId = null;
 
+const HOT = ["14","30","HOP"]; /* her lines */
 const HELEN_LL = [43.03873, -87.91116]; /* 740 N Plankinton */
 const DOWNTOWN_B = [[-87.9335, 43.0305], [-87.8755, 43.0492]]; /* N12 station to Prospect & Mason, her whole downtown world */
 
@@ -192,14 +204,7 @@ function shapePts(rid){
   const sh = S.shapes[rid];
   if(!sh) return null;
   const dirs = Object.values(sh);
-  let pts = dirs.sort((a,b)=>b.length-a.length)[0].map(p=>[p[1],p[0]]);
-  /* stride-sample so re-projection stays cheap on the phone */
-  if(pts.length > 160){
-    const step = Math.ceil(pts.length/160), out = [];
-    for(let i=0;i<pts.length;i+=step) out.push(pts[i]);
-    if(out[out.length-1] !== pts[pts.length-1]) out.push(pts[pts.length-1]);
-    pts = out;
-  }
+  const pts = dirs.sort((a,b)=>b.length-a.length)[0].map(p=>[p[1],p[0]]);
   const m = HC.polylineMetrics(pts);
   shapeCache[rid] = {pts, m};
   return shapeCache[rid];
@@ -238,8 +243,8 @@ function buildOverlay(){
 }
 function renderOverlay(){
   if(gGhost) Array.from(gGhost.children).forEach(p=>{ const d = pathFor(p.dataset.rid); if(d) p.setAttribute("d", d); });
-  if(gCase) Array.from(gCase.children).forEach(p=>{ const d = pathFor(p.dataset.rid); if(d) p.setAttribute("d", d); });
-  if(gLive) Array.from(gLive.children).forEach(p=>{ const d = pathFor(p.dataset.rid); if(d) p.setAttribute("d", d); });
+  if(gCase) Array.from(gCase.children).forEach(p=>{ const d = pathFor(p.dataset.ck || p.dataset.rid); if(d) p.setAttribute("d", d); });
+  if(gLive) Array.from(gLive.children).forEach(p=>{ const d = pathFor(p.dataset.ck || p.dataset.rid); if(d) p.setAttribute("d", d); });
   if(gMark){ const q = px(HELEN_LL[0], HELEN_LL[1]); gMark.setAttribute("transform","translate("+q.x.toFixed(1)+","+q.y.toFixed(1)+")"); }
 }
 function queueRender(){
@@ -257,29 +262,39 @@ function paintLive(live, first){
   rts.forEach((rid,i)=>{
     if(!shapePts(rid)) return;
     const p = document.createElementNS(NS,"path");
-    p.setAttribute("class","route-live");
+    p.setAttribute("class","route-live"+(HOT.indexOf(rid)>=0?" hotr":""));
     p.style.stroke = HC.routeColor(rid); p.dataset.rid = rid;
     p.addEventListener("click",()=>select(rid));
     const cs = document.createElementNS(NS,"path");
-    cs.setAttribute("class","route-case"); cs.dataset.rid = rid;
+    cs.setAttribute("class","route-case"+(HOT.indexOf(rid)>=0?" hotr":"")); cs.dataset.rid = rid;
     gCase.appendChild(cs); gLive.appendChild(p);
     if(first){ HC.drawOn(cs, 500, 350+i*55); HC.drawOn(p, 500, 350+i*55); }
   });
   if(live.hop && live.hop.length){
-    const stops = S.hop.stops.slice().sort((a,b)=>a.id-b.id);
-    const pts = stops.map(s=>[s.lon,s.lat]);
-    if(pts.length>2){
-      const m = HC.polylineMetrics(pts);
-      shapeCache["HOP"] = {pts, m};
+    /* real streetcar track: dense GTFS line geometry, one per street */
+    const lineKeys = (S.hop.lines && Object.keys(S.hop.lines).length) ? Object.keys(S.hop.lines) : null;
+    const tracks = [];
+    if(lineKeys){
+      lineKeys.forEach((lk,i)=>{
+        const pts = S.hop.lines[lk].map(p=>[p[1],p[0]]);
+        if(pts.length>2) tracks.push({ck: i===0?"HOP":"HOP"+(i+1), pts, m: HC.polylineMetrics(pts)});
+      });
+    } else {
+      const pts = S.hop.stops.slice().sort((a,b)=>a.id-b.id).map(s=>[s.lon,s.lat]);
+      if(pts.length>2) tracks.push({ck:"HOP", pts, m: HC.polylineMetrics(pts)});
+    }
+    tracks.forEach((tr,i)=>{
+      shapeCache[tr.ck] = {pts: tr.pts, m: tr.m};
       const p = document.createElementNS(NS,"path");
-      p.setAttribute("class","route-live");
-      p.style.stroke = HC.routeColor("HOP"); p.dataset.rid = "HOP";
+      p.setAttribute("class","route-live"+(HOT.indexOf("HOP")>=0?" hotr":""));
+      p.style.stroke = HC.routeColor("HOP"); p.dataset.rid = "HOP"; p.dataset.ck = tr.ck;
       p.addEventListener("click",()=>select("HOP"));
       const cs = document.createElementNS(NS,"path");
-      cs.setAttribute("class","route-case"); cs.dataset.rid = "HOP";
+      cs.setAttribute("class","route-case"+(HOT.indexOf("HOP")>=0?" hotr":""));
+      cs.dataset.rid = "HOP"; cs.dataset.ck = tr.ck;
       gCase.appendChild(cs); gLive.appendChild(p);
-      if(first){ HC.drawOn(cs, 500, 350+rts.length*55); HC.drawOn(p, 500, 350+rts.length*55); }
-    }
+      if(first){ HC.drawOn(cs, 500, 350+(rts.length+i)*55); HC.drawOn(p, 500, 350+(rts.length+i)*55); }
+    });
   }
   renderOverlay();
   return rts;
@@ -294,7 +309,7 @@ function paintVehicles(live, first){
     let g = gVeh.querySelector('[id="'+key+'"]');
     if(!g){
       g = document.createElementNS(NS,"g");
-      g.setAttribute("class","veh"); g.id = key; g.dataset.rid = v.route;
+      g.setAttribute("class","veh"+(HOT.indexOf(v.route)>=0?" hotr":"")); g.id = key; g.dataset.rid = v.route;
       const cc = document.createElementNS(NS,"circle");
       cc.setAttribute("class","dot"); cc.setAttribute("r","6.5"); cc.style.fill = HC.routeColor(v.route);
       g.appendChild(cc);
@@ -305,14 +320,22 @@ function paintVehicles(live, first){
     g.dataset.fracKey = key;
   });
   (live.hop||[]).forEach(hv=>{
-    const c = shapeCache["HOP"]; if(!c) return;
-    const f = HC.projectFrac(c.pts, c.m, hv.lat, hv.lon);
+    let c = shapeCache["HOP"], ck = "HOP"; if(!c) return;
+    let f = HC.projectFrac(c.pts, c.m, hv.lat, hv.lon);
+    if(shapeCache["HOP2"]){
+      const c2 = shapeCache["HOP2"];
+      const f2 = HC.projectFrac(c2.pts, c2.m, hv.lat, hv.lon);
+      const p1 = HC.pointAtFrac(c.pts, c.m, f), p2 = HC.pointAtFrac(c2.pts, c2.m, f2);
+      const d1 = (p1[0]-hv.lon)*(p1[0]-hv.lon)+(p1[1]-hv.lat)*(p1[1]-hv.lat);
+      const d2 = (p2[0]-hv.lon)*(p2[0]-hv.lon)+(p2[1]-hv.lat)*(p2[1]-hv.lat);
+      if(d2<d1){ c=c2; ck="HOP2"; f=f2; }
+    }
     const key = "h"+hv.id; keys.push(key);
     tracker.set(key, f);
     let g = gVeh.querySelector('[id="'+key+'"]');
     if(!g){
       g = document.createElementNS(NS,"g");
-      g.setAttribute("class","veh"); g.id = key; g.dataset.rid = "HOP";
+      g.setAttribute("class","veh"+(HOT.indexOf("HOP")>=0?" hotr":"")); g.id = key; g.dataset.rid = "HOP";
       const r = document.createElementNS(NS,"rect");
       r.setAttribute("width","11"); r.setAttribute("height","11");
       r.setAttribute("x","-5.5"); r.setAttribute("y","-5.5");
@@ -322,7 +345,7 @@ function paintVehicles(live, first){
       gVeh.appendChild(g);
       if(first && !FOL){ g.style.opacity="0"; setTimeout(()=>{ g.style.opacity=""; }, 600+Math.random()*800); }
     }
-    g.dataset.fracKey = key;
+    g.dataset.fracKey = key; g.dataset.ck = ck;
   });
   Array.from(gVeh.children).forEach(g=>{ if(keys.indexOf(g.id)<0) g.remove(); });
 }
@@ -332,7 +355,7 @@ function frame(){
     Array.from(gVeh.children).forEach(g=>{
       const key = g.dataset.fracKey; if(!key) return;
       const f = tracker.get(key); if(f===null) return;
-      const c = shapeCache[g.dataset.rid]; if(!c) return;
+      const c = shapeCache[g.dataset.ck || g.dataset.rid]; if(!c) return;
       const ll = HC.pointAtFrac(c.pts, c.m, f);
       const q = px(ll[1], ll[0]);
       g.setAttribute("transform","translate("+q.x.toFixed(2)+","+q.y.toFixed(2)+")");
@@ -420,6 +443,11 @@ function flyTo(on){
   }
 }
 document.getElementById("zoombtn").addEventListener("click", ()=>flyTo(!zoomed));
+document.getElementById("hotbtn").addEventListener("click", ()=>{
+  const on = document.getElementById("stage").classList.toggle("hot");
+  document.getElementById("hotbtn").classList.toggle("on", on);
+  document.getElementById("hotbtn").textContent = on ? "ALL ROUTES" : "HOT ROUTES";
+});
 
 /* ---- follow mode ---- */
 function folPrediction(live){
@@ -438,6 +466,7 @@ function folApply(live, first){
   document.getElementById("followcap").classList.add("on");
   document.getElementById("chips").style.display = "none";
   document.getElementById("zoombtn").style.display = "none";
+  document.getElementById("hotbtn").style.display = "none";
   document.getElementById("stage").classList.add("dim");
   document.querySelectorAll(".route-live,.route-case").forEach(p=>{
     p.classList.toggle("sel", FOL.cfg.routes.indexOf(p.dataset.rid)>=0);
