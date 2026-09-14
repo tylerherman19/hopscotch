@@ -47,7 +47,9 @@ body{background:var(--marble);color:var(--ink);font-family:"IBM Plex Mono",monos
 .row.boarding .dep{color:var(--red)}
 .row .rt{justify-self:start;min-width:34px;text-align:center;font-weight:500;font-size:12px;
   color:var(--panel);padding:3px 0}
-.row .dest{min-width:0}
+.row .dest{min-width:0;display:block;overflow:hidden}
+.row .dest .rname{display:block}
+.row .dest .stop{display:block}
 .row .dest .rname{font-family:Fraunces,serif;font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row .dest .stop{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 .row .st{font-size:9px;text-align:right;letter-spacing:.06em}
@@ -143,7 +145,7 @@ function collect(live){
   const rows = [];
   live.vehicles.forEach(v=>{
     if(!v.next || !v.next[0]) return;
-    const n = v.next[0];
+    const n = v.next[1] || v.next[0]; /* the stop after next: a board with spread */
     if(n.at - now < -20) return; /* only what has not left yet */
     rows.push({key:v.id+"-"+n.stop, route:v.route, stop:n.stop, name:n.name,
       at:n.at, delay:v.delay||0, bus:v.id});
