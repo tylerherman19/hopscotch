@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Station · Hopscotch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --marble:#f5f2ea; --panel:#faf8f1; --ink:#1c1913; --muted:#7a7263;
+  --hair:#e3ddcd; --brass:#a2832c; --red:#c0392b;
+  --ease:cubic-bezier(.2,.7,.2,1); --settle:cubic-bezier(.16,1,.3,1);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.frozen *,.frozen *:before,.frozen *:after{transition:none!important;animation:none!important}
+html{background:var(--marble)}
+body{background:var(--marble);color:var(--ink);font-family:"IBM Plex Mono",monospace;
+  font-variant-numeric:tabular-nums;min-height:100%}
+.serif{font-family:Fraunces,serif}
+
+/* hall */
+#hall{max-width:560px;margin:0 auto;padding:18px 14px 60px}
+#clockrow{display:flex;align-items:center;gap:14px;padding:4px 2px 14px;border-bottom:3px double var(--ink)}
+#clock{width:74px;height:74px;flex:0 0 auto}
+#clock circle,#clock line,#clock path{fill:none;stroke:var(--ink);stroke-linecap:round}
+#titleblock{flex:1;min-width:0}
+#titleblock h1{font-family:Fraunces,serif;font-weight:900;font-size:26px;letter-spacing:.01em;line-height:1.05}
+#titleblock .sub{font-size:9px;letter-spacing:.22em;color:var(--muted);margin-top:5px}
+#dateblock{text-align:right;font-size:10px;color:var(--muted);line-height:1.6}
+#dateblock b{color:var(--ink);font-weight:500}
+
+#status{display:flex;justify-content:space-between;gap:10px;padding:8px 2px 10px;border-bottom:1px solid var(--hair);
+  font-size:10px;color:var(--muted)}
+#status b{color:var(--ink)}
+
+/* board */
+#board{margin-top:6px}
+.bhead,.row{display:grid;grid-template-columns:44px 1fr 62px 58px;gap:8px;align-items:baseline;padding:0 2px}
+.bhead{font-size:8px;letter-spacing:.18em;color:var(--muted);padding-top:10px;padding-bottom:6px;border-bottom:1px solid var(--ink)}
+.row{padding-top:11px;padding-bottom:11px;border-bottom:1px solid var(--hair);
+  opacity:0;transform:translateY(8px)}
+.row.in{opacity:1;transform:none;transition:opacity 420ms var(--ease),transform 420ms var(--ease)}
+.row.out{opacity:0;transform:translateY(-8px);transition:opacity 420ms var(--ease),transform 420ms var(--ease)}
+.row .dep{font-size:17px;font-weight:500}
+.row .dep small{font-size:8px;color:var(--muted);letter-spacing:.1em}
+.row.boarding .dep{color:var(--red)}
+.row .rt{justify-self:start;min-width:34px;text-align:center;font-weight:500;font-size:12px;
+  color:var(--panel);padding:3px 0}
+.row .dest{min-width:0}
+.row .dest .rname{font-family:Fraunces,serif;font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .dest .stop{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.row .st{font-size:9px;text-align:right;letter-spacing:.06em}
+.row .st.ok{color:var(--muted)}
+.row .st.late{color:var(--brass)}
+.row .st.brd{color:var(--red);font-weight:500}
+
+#foot{margin-top:26px;text-align:center;font-size:9px;color:var(--muted);line-height:1.9;letter-spacing:.05em}
+#foot .serif{font-size:13px;color:var(--ink)}
+</style>
+</head>
+<body>
+<div id="hall">
+  <div id="clockrow">
+    <svg id="clock" viewBox="0 0 74 74">
+      <circle cx="37" cy="37" r="34" stroke-width="2.5"/>
+      <g id="ticks"></g>
+      <line id="hh" x1="37" y1="37" x2="37" y2="20" stroke-width="3.4"/>
+      <line id="mh" x1="37" y1="37" x2="37" y2="11" stroke-width="2.2"/>
+      <line id="sh" x1="37" y1="40" x2="37" y2="9" stroke="#a2832c" stroke-width="1.2"/>
+      <circle cx="37" cy="37" r="2.4" stroke-width="0" fill="#1c1913" stroke="none"/>
+    </svg>
+    <div id="titleblock">
+      <h1>DEPARTURES</h1>
+      <div class="sub">MILWAUKEE INTERMODAL · ALL LINES</div>
+    </div>
+    <div id="dateblock"></div>
+  </div>
+  <div id="status"><span id="stleft"></span><span id="stright"></span></div>
+  <div id="board">
+    <div class="bhead"><span>LINE</span><span>DESTINATION · AT STOP</span><span style="text-align:right">STATUS</span><span style="text-align:right">DEPARTS</span></div>
+    <div id="rows"></div>
+  </div>
+  <div id="foot">
+    <div class="serif">The board never bluffs.</div>
+    every bus and streetcar, one hall. times are live predictions;<br>a row that lifts off has left the station.
+  </div>
+</div>
+<script src="hop-core.js"></script>
+<script>
+(function(){
+"use strict";
+const HC = window.HOPCORE, M = HC.MOTION;
+const rowsEl = document.getElementById("rows");
+let S, board = []; /* {key,route,stop,name,at,delay,bus} */
+
+/* clock */
+(function buildClock(){
+  const g = document.getElementById("ticks");
+  const NS = "http://www.w3.org/2000/svg";
+  for(let i=0;i<12;i++){
+    const a = i*Math.PI/6;
+    const l = document.createElementNS(NS,"line");
+    const big = i%3===0;
+    l.setAttribute("x1", 37+Math.sin(a)*(big?27:30)); l.setAttribute("y1", 37-Math.cos(a)*(big?27:30));
+    l.setAttribute("x2", 37+Math.sin(a)*32); l.setAttribute("y2", 37-Math.cos(a)*32);
+    l.setAttribute("stroke-width", big?2:1);
+    g.appendChild(l);
+  }
+})();
+function sweepClock(){
+  const now = new Date();
+  const s = now.getSeconds()+now.getMilliseconds()/1000;
+  const m = now.getMinutes()+s/60;
+  const h = (now.getHours()%12)+m/60;
+  const set=(id,deg)=>{ document.getElementById(id).setAttribute("transform","rotate("+deg+" 37 37)"); };
+  set("hh", h*30); set("mh", m*6); set("sh", s*6);
+}
+window.addEventListener("load", ()=>{
+  document.querySelectorAll("#clock circle:first-child").forEach(c=>HC.drawOn(c,700,80));
+  document.querySelectorAll("#ticks line").forEach((l,i)=>HC.drawOn(l,150,300+i*30));
+  ["hh","mh","sh"].forEach((id,i)=>{
+    const el=document.getElementById(id);
+    el.style.transformOrigin="37px 37px";
+    el.style.opacity="0";
+    setTimeout(()=>{ el.style.transition="opacity 240ms "+M.standard; el.style.opacity="1"; }, 800+i*160);
+  });
+  setTimeout(sweepClock, 1200);
+  setInterval(sweepClock, 1000);
+});
+
+/* date line */
+(function(){
+  const d = new Date();
+  const days=["SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY"];
+  const mons=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  document.getElementById("dateblock").innerHTML =
+    "<b>"+days[d.getDay()]+"</b><br>"+mons[d.getMonth()]+" "+d.getDate()+"<br><span id='feedage'></span>";
+})();
+
+function collect(live){
+  const now = Date.now()/1000;
+  const rows = [];
+  live.vehicles.forEach(v=>{
+    if(!v.next || !v.next[0]) return;
+    const n = v.next[0];
+    rows.push({key:v.id+"-"+n.stop, route:v.route, stop:n.stop, name:n.name,
+      at:n.at, delay:v.delay||0, bus:v.id});
+  });
+  rows.sort((a,b)=>a.at-b.at);
+  return rows.slice(0,18);
+}
+
+function statFor(r){
+  const secs = r.at - Date.now()/1000;
+  if(secs <= 60) return {cls:"brd", txt:"BOARDING"};
+  if(r.delay >= 300) return {cls:"late", txt:"+"+Math.round(r.delay/60)+" LATE"};
+  return {cls:"ok", txt:"ON TIME"};
+}
+
+function render(first){
+  const now = Date.now()/1000;
+  board = board.filter(r => r.at-now > (first ? -3600 : -25)); /* drop long-gone */
+  const seen = {};
+  board.forEach(r=>seen[r.key]=r);
+  const fresh = collect(HC.LIVE);
+  fresh.forEach(r=>{ if(!seen[r.key]) board.push(r); });
+  board.sort((a,b)=>a.at-b.at);
+  board = board.slice(0,18);
+  if(first && !board.length){
+    rowsEl.innerHTML = '<div class="row in" data-key="frozen"><span class="rt" style="background:#1c1913">--</span><span class="dest"><span class="rname">Board frozen</span><span class="stop">the feed went quiet; check back shortly</span></span><span class="st ok"><span class="stxt">HELD</span></span><span class="dep" style="text-align:right"><span class="mn">--</span></span></div>';
+    return;
+  }
+
+  /* reconcile DOM */
+  const dom = {};
+  Array.from(rowsEl.children).forEach(el=>dom[el.dataset.key]=el);
+  board.forEach((r,i)=>{
+    const mins = Math.max(0, Math.round((r.at-now)/60));
+    const st = statFor(r);
+    let el = dom[r.key];
+    if(!el){
+      el = document.createElement("div");
+      el.className = "row"; el.dataset.key = r.key;
+      el.innerHTML =
+        '<span class="rt" style="background:'+HC.routeColor(r.route)+'">'+r.route+'</span>'+
+        '<span class="dest"><span class="rname">'+HC.routeName(r.route)+'</span>'+
+        '<span class="stop">at '+r.name.toLowerCase()+'</span></span>'+
+        '<span class="st"><span class="stxt"></span></span>'+
+        '<span class="dep" style="text-align:right"><span class="mn"></span> <small>MIN</small></span>';
+      rowsEl.appendChild(el);
+    }
+    el.querySelector(".mn").textContent = mins;
+    const stxt = el.querySelector(".stxt");
+    stxt.textContent = st.txt;
+    el.querySelector(".st").className = "st "+st.cls;
+    el.classList.toggle("boarding", st.cls==="brd");
+    /* order */
+    rowsEl.appendChild(el); /* re-append in sorted order */
+    if(first || !el.classList.contains("in")){
+      setTimeout(()=>el.classList.add("in"), first ? 300+i*70 : 10);
+    }
+  });
+  /* departed rows lift off */
+  Array.from(rowsEl.children).forEach(el=>{
+    if(!board.find(r=>r.key===el.dataset.key)){
+      el.classList.add("out");
+      setTimeout(()=>el.remove(), 450);
+    }
+  });
+}
+
+function tick(){
+  /* local countdown tick every 5s: refresh minute numbers + status, no rebuild */
+  if(HC.LIVE && (Date.now()-HC.LIVE.ts*1000) > 240000) return; /* held board on a stale feed */
+  const now = Date.now()/1000;
+  Array.from(rowsEl.children).forEach(el=>{
+    const r = board.find(x=>x.key===el.dataset.key); if(!r) return;
+    const mins = Math.max(0, Math.round((r.at-now)/60));
+    el.querySelector(".mn").textContent = mins;
+    const st = statFor(r);
+    el.querySelector(".stxt").textContent = st.txt;
+    el.querySelector(".st").className = "st "+st.cls;
+    el.classList.toggle("boarding", st.cls==="brd");
+  });
+  /* rows whose time has fully come lift off */
+  board.filter(r=>r.at-now < -8).forEach(r=>{
+    const el = rowsEl.querySelector('[data-key="'+r.key+'"]');
+    if(el && !el.classList.contains("out")){ el.classList.add("out"); setTimeout(()=>el.remove(),450); }
+  });
+}
+
+function status(live){
+  const age = Math.max(0,Math.round((Date.now()-live.ts*1000)/1000));
+  document.getElementById("stleft").innerHTML = "<b>"+live.status+"</b>";
+  document.getElementById("stright").textContent = "BOARD LIVE · "+age+"S AGO";
+  const n = live.vehicles.length+(live.hop||[]).length;
+  document.getElementById("feedage").textContent = n+" OUT";
+}
+
+(async function boot(){
+  S = await HC.loadStatic();
+  const live = await HC.loadLive();
+  board = [];
+  render(true); status(live);
+  setInterval(tick, 5000);
+  setInterval(async ()=>{
+    try{ const l2 = await HC.loadLive(); render(false); status(l2); }catch(e){}
+  }, 30000);
+})();
+})();
+</script>
+</body>
+</html>
