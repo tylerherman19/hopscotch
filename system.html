@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The whole system · Hopscotch</title>
+<meta name="description" content="Every Milwaukee bus and Hop streetcar, drawn live on one chalk diagram.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23efe9dc'/><text x='16' y='23' font-family='cursive' font-size='20' fill='%233a352c' text-anchor='middle'>H</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#efe9dc; --card:#f4efe3; --ink:#3a352c; --muted:#8a8172;
+  --hair:#ddd5c2; --red:#c84b3c;
+  --ease:cubic-bezier(.2,.7,.2,1); --settle:cubic-bezier(.16,1,.3,1);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.frozen *,.frozen *:before,.frozen *:after{transition:none!important;animation:none!important}
+html{background:var(--paper)}
+body{background:var(--paper);color:var(--ink);
+  font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+#grain{position:fixed;inset:0;pointer-events:none;z-index:60;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px 46px}
+
+header{padding:24px 0 0;text-align:center}
+h1{font-family:Caveat,cursive;font-weight:700;font-size:40px;line-height:1}
+.sub{font-size:10px;letter-spacing:.18em;color:var(--muted);margin-top:6px}
+#status{text-align:center;font-size:11px;color:var(--muted);margin:10px 0 0;min-height:14px}
+#status b{color:var(--ink)}
+
+#nav{display:flex;justify-content:center;gap:26px;margin:16px 0 2px}
+#nav a{font-size:10px;letter-spacing:.14em;color:var(--muted);text-decoration:none;
+  padding:4px 2px;position:relative;transition:color 240ms var(--ease)}
+#nav a.here{color:var(--ink)}
+#nav a.here:after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;
+  background:var(--red);border-radius:2px;transform:scaleX(1);transform-origin:left;
+  animation:under 620ms var(--settle) both}
+@keyframes under{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+#nav a:active{opacity:.5}
+
+#mapcard{background:var(--card);border:1.5px solid var(--ink);margin-top:16px;position:relative;
+  opacity:0;transform:translateY(8px)}
+#mapcard.in{opacity:1;transform:none;transition:opacity 620ms var(--ease),transform 620ms var(--ease)}
+#stage{height:min(58vh,470px);position:relative}
+#stage svg{width:100%;height:100%;display:block}
+.route-ghost{fill:none;stroke:#e2d9c6;stroke-width:1;stroke-linecap:round}
+.route-live{fill:none;stroke-width:2.4;stroke-linecap:round;cursor:pointer;
+  transition:opacity 420ms var(--ease),stroke-width 240ms var(--ease)}
+.veh{transition:opacity 240ms var(--ease)}
+.veh circle{stroke:var(--card);stroke-width:1.4}
+#stage.dim .route-live{opacity:.08}
+#stage.dim .route-live.sel{opacity:1;stroke-width:3.6}
+#stage.dim .veh{opacity:.1}
+#stage.dim .veh.sel{opacity:1}
+#mapcap{display:flex;justify-content:space-between;padding:8px 12px;border-top:1px dashed var(--hair);
+  font-size:9px;letter-spacing:.1em;color:var(--muted)}
+#mapcap b{color:var(--ink);font-weight:500}
+
+#chips{display:flex;gap:8px;overflow-x:auto;padding:12px 2px 6px;scrollbar-width:none}
+#chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;border:1.5px solid var(--ink);background:var(--card);
+  min-width:52px;height:56px;padding:6px 8px;cursor:pointer;
+  opacity:0;transform:translateY(8px);
+  transition:transform 120ms var(--ease),background 240ms var(--ease)}
+.chip:active{transform:scale(.96)}
+.chip.in{opacity:1;transform:none;transition:opacity 420ms var(--ease),transform 420ms var(--ease),background 240ms var(--ease)}
+.chip .rn{font-weight:600;font-size:15px;line-height:1.1}
+.chip .rc{font-size:9px;color:var(--muted);margin-top:4px}
+.chip.sel{background:var(--ink)}
+.chip.sel .rn{color:var(--paper)}
+.chip.sel .rc{color:#bdb7a8}
+
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--card);
+  border-top:1.5px solid var(--ink);max-height:62%;display:flex;flex-direction:column;
+  transform:translateY(102%);transition:transform 420ms var(--ease)}
+#sheet.open{transform:none}
+#sheet .grab{width:36px;height:3px;background:var(--hair);margin:8px auto 2px}
+#sheet .head{padding:8px 16px 10px;border-bottom:1px dashed var(--hair);display:flex;align-items:baseline;gap:10px}
+#sheet .head .rt{font-family:Caveat,cursive;font-weight:700;font-size:27px;line-height:1}
+#sheet .head .nm{font-size:10px;color:var(--muted);flex:1;min-width:0;letter-spacing:.06em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#sheet .head .x{font-size:10px;color:var(--muted);cursor:pointer;padding:4px;letter-spacing:.1em}
+#rows{overflow-y:auto;padding:4px 0 18px}
+.row{display:flex;align-items:baseline;gap:10px;padding:10px 16px;border-bottom:1px solid var(--hair);
+  opacity:0;transform:translateY(8px)}
+.row.in{opacity:1;transform:none;transition:opacity 420ms var(--ease),transform 420ms var(--ease)}
+.row .sn{flex:1;min-width:0;font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .via{font-size:9px;color:var(--muted)}
+.row .eta{font-size:14px;font-weight:500}
+.row .eta small{font-size:9px;color:var(--muted)}
+.row.hot .eta{color:var(--red)}
+#empty{padding:18px 16px;font-size:11px;color:var(--muted)}
+
+footer{margin-top:30px;text-align:center;font-size:10px;color:var(--muted);line-height:1.9}
+</style>
+</head>
+<body>
+<div id="grain"></div>
+<div class="wrap">
+
+<header>
+  <h1>the whole system</h1>
+  <div class="sub">EVERY ROUTE IN MILWAUKEE, DRAWN LIVE</div>
+  <div id="status"></div>
+</header>
+
+<nav id="nav">
+  <a href="index.html">HER LINES</a>
+  <a href="system.html" class="here">THE WHOLE SYSTEM</a>
+</nav>
+
+<div id="mapcard">
+  <div id="stage"><svg id="map" preserveAspectRatio="xMidYMid meet"></svg></div>
+  <div id="mapcap"><span>CHALK LINES = ROUTES RUNNING NOW · TAP ONE</span><span id="maplive"><b>--</b> MOVING</span></div>
+</div>
+
+<div id="chips"></div>
+
+<footer>ghost lines are every route the city owns.<br>chalk lines are the ones out right now.</footer>
+</div>
+
+<div id="sheet">
+  <div class="grab"></div>
+  <div class="head"><span class="rt" id="srt"></span><span class="nm" id="snm"></span><span class="x" id="sx">CLOSE</span></div>
+  <div id="rows"></div>
+</div>
+
+<script src="hop-core.js"></script>
+<script>
+(function(){
+"use strict";
+const HC = window.HOPCORE, M = HC.MOTION;
+const NS = "http://www.w3.org/2000/svg";
+let S, fit, tracker = HC.makeTracker(), sel = null, shapeCache = {};
+
+function shapePts(rid){
+  if(shapeCache[rid]) return shapeCache[rid];
+  const sh = S.shapes[rid];
+  if(!sh) return null;
+  const dirs = Object.values(sh);
+  const pts = dirs.sort((a,b)=>b.length-a.length)[0].map(p=>[p[1],p[0]]);
+  const m = HC.polylineMetrics(pts);
+  shapeCache[rid] = {pts, m};
+  return shapeCache[rid];
+}
+function pathFor(rid){
+  const c = shapePts(rid); if(!c) return null;
+  return c.pts.map((p,i)=>{ const q=fit(p[1],p[0]); return (i?"L":"M")+q.x.toFixed(1)+","+q.y.toFixed(1); }).join("");
+}
+function buildMap(){
+  const stage = document.getElementById("stage");
+  const w = stage.clientWidth, h = stage.clientHeight;
+  const svg = document.getElementById("map");
+  svg.setAttribute("viewBox","0 0 "+w+" "+h);
+  let a=[90,-90,0,-180];
+  Object.values(S.shapes).forEach(dirs=>Object.values(dirs).forEach(pts=>pts.forEach(p=>{
+    a[0]=Math.min(a[0],p[0]); a[1]=Math.max(a[1],p[0]); a[2]=Math.min(a[2],p[1]); a[3]=Math.max(a[3],p[1]);
+  })));
+  fit = HC.fitter(a, w, h, 18);
+  svg.innerHTML = "";
+  const gGhost = document.createElementNS(NS,"g"); svg.appendChild(gGhost);
+  const gLive  = document.createElementNS(NS,"g"); svg.appendChild(gLive);
+  const gVeh   = document.createElementNS(NS,"g"); gVeh.id="gveh"; svg.appendChild(gVeh);
+  let i=0;
+  Object.keys(S.shapes).forEach(rid=>{
+    const d = pathFor(rid); if(!d) return;
+    const p = document.createElementNS(NS,"path");
+    p.setAttribute("d",d); p.setAttribute("class","route-ghost");
+    gGhost.appendChild(p);
+    HC.drawOn(p, 300, i*10); i++;
+  });
+  return {gLive, gVeh};
+}
+function paintLive(gLive, live){
+  gLive.innerHTML = "";
+  const seen = {};
+  live.vehicles.forEach(v=>{ seen[v.route]=true; });
+  const rts = Object.keys(seen).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  rts.forEach((rid,i)=>{
+    const d = pathFor(rid); if(!d) return;
+    const p = document.createElementNS(NS,"path");
+    p.setAttribute("d",d); p.setAttribute("class","route-live");
+    p.style.stroke = HC.routeColor(rid); p.dataset.rid = rid;
+    p.addEventListener("click",()=>select(rid));
+    gLive.appendChild(p);
+    HC.drawOn(p, 500, 350+i*55);
+  });
+  if(live.hop && live.hop.length){
+    const stops = S.hop.stops.slice().sort((a,b)=>a.id-b.id);
+    const pts = stops.map(s=>[s.lon,s.lat]);
+    if(pts.length>2){
+      const m = HC.polylineMetrics(pts);
+      shapeCache["HOP"] = {pts, m};
+      const d = pts.map((p,i)=>{const q=fit(p[1],p[0]); return (i?"L":"M")+q.x.toFixed(1)+","+q.y.toFixed(1);}).join("");
+      const p = document.createElementNS(NS,"path");
+      p.setAttribute("d",d); p.setAttribute("class","route-live");
+      p.style.stroke = HC.routeColor("HOP"); p.dataset.rid = "HOP";
+      p.addEventListener("click",()=>select("HOP"));
+      gLive.appendChild(p);
+      HC.drawOn(p, 500, 350+rts.length*55);
+    }
+  }
+  return rts;
+}
+function paintVehicles(gVeh, live, first){
+  const keys = [];
+  live.vehicles.forEach(v=>{
+    const c = shapePts(v.route); if(!c) return;
+    const f = HC.projectFrac(c.pts, c.m, v.lat, v.lon);
+    const key = "b"+v.id; keys.push(key);
+    tracker.set(key, f);
+    let g = document.getElementById(key);
+    if(!g){
+      g = document.createElementNS(NS,"g");
+      g.setAttribute("class","veh"); g.id = key; g.dataset.rid = v.route;
+      const cc = document.createElementNS(NS,"circle");
+      cc.setAttribute("r","4.2"); cc.style.fill = HC.routeColor(v.route);
+      g.appendChild(cc);
+      g.addEventListener("click",()=>select(v.route));
+      gVeh.appendChild(g);
+      if(first){ g.style.opacity="0"; setTimeout(()=>{g.style.opacity="1";}, 600+Math.random()*800); }
+    }
+    g.dataset.fracKey = key;
+  });
+  (live.hop||[]).forEach(hv=>{
+    const c = shapeCache["HOP"]; if(!c) return;
+    const f = HC.projectFrac(c.pts, c.m, hv.lat, hv.lon);
+    const key = "h"+hv.id; keys.push(key);
+    tracker.set(key, f);
+    let g = document.getElementById(key);
+    if(!g){
+      g = document.createElementNS(NS,"g");
+      g.setAttribute("class","veh"); g.id = key; g.dataset.rid = "HOP";
+      const r = document.createElementNS(NS,"rect");
+      r.setAttribute("width","8"); r.setAttribute("height","8");
+      r.setAttribute("x","-4"); r.setAttribute("y","-4");
+      r.style.fill = HC.routeColor("HOP"); r.style.stroke="#f4efe3"; r.style.strokeWidth="1.4";
+      g.appendChild(r);
+      g.addEventListener("click",()=>select("HOP"));
+      gVeh.appendChild(g);
+      if(first){ g.style.opacity="0"; setTimeout(()=>{g.style.opacity="1";}, 600+Math.random()*800); }
+    }
+    g.dataset.fracKey = key;
+  });
+  Array.from(gVeh.children).forEach(g=>{ if(keys.indexOf(g.id)<0) g.remove(); });
+}
+function frame(){
+  const gVeh = document.getElementById("gveh");
+  if(gVeh && fit){
+    tracker.tick();
+    Array.from(gVeh.children).forEach(g=>{
+      const key = g.dataset.fracKey; if(!key) return;
+      const f = tracker.get(key); if(f===null) return;
+      const c = shapeCache[g.dataset.rid]; if(!c) return;
+      const ll = HC.pointAtFrac(c.pts, c.m, f);
+      const q = fit(ll[1], ll[0]);
+      g.setAttribute("transform","translate("+q.x.toFixed(2)+","+q.y.toFixed(2)+")");
+    });
+  }
+  requestAnimationFrame(frame);
+}
+function renderChips(rts, live){
+  const el = document.getElementById("chips");
+  el.innerHTML = "";
+  const counts = {};
+  live.vehicles.forEach(v=>counts[v.route]=(counts[v.route]||0)+1);
+  const all = rts.concat((live.hop&&live.hop.length)?["HOP"]:[]);
+  all.forEach((rid,i)=>{
+    const n = rid==="HOP" ? live.hop.length : (counts[rid]||0);
+    const c = document.createElement("div");
+    c.className = "chip"; c.dataset.rid = rid;
+    c.innerHTML = '<div class="rn" style="color:'+HC.routeColor(rid)+'">'+(rid==="HOP"?"HOP":rid)+'</div><div class="rc">'+n+' OUT</div>';
+    c.addEventListener("click",()=>select(rid));
+    el.appendChild(c);
+    setTimeout(()=>c.classList.add("in"), 500+i*45);
+  });
+}
+function arrivalsFor(rid, live){
+  const rows = {}; const now = Date.now()/1000;
+  live.vehicles.filter(v=>v.route===rid).forEach(v=>(v.next||[]).slice(0,3).forEach(n=>{
+    const mins = Math.max(0, Math.round((n.at - now)/60));
+    if(!rows[n.stop] || rows[n.stop].mins > mins)
+      rows[n.stop] = {name:n.name, mins, bus:v.id};
+  }));
+  return Object.values(rows).sort((a,b)=>a.mins-b.mins).slice(0,9);
+}
+function select(rid){
+  sel = rid;
+  document.getElementById("stage").classList.add("dim");
+  document.querySelectorAll(".route-live").forEach(p=>p.classList.toggle("sel", p.dataset.rid===rid));
+  document.querySelectorAll(".veh").forEach(g=>g.classList.toggle("sel", g.dataset.rid===rid));
+  document.querySelectorAll(".chip").forEach(c=>c.classList.toggle("sel", c.dataset.rid===rid));
+  const sheet = document.getElementById("sheet");
+  document.getElementById("srt").textContent = rid==="HOP" ? "the Hop" : "route "+rid;
+  document.getElementById("srt").style.color = HC.routeColor(rid);
+  document.getElementById("snm").textContent = rid==="HOP" ? "STREETCAR · DOWNTOWN LOOP" : (HC.routeName(rid)||"").toUpperCase();
+  const rows = document.getElementById("rows");
+  rows.innerHTML = "";
+  const list = arrivalsFor(rid, HC.LIVE);
+  if(rid==="HOP"){
+    rows.innerHTML = '<div id="empty">'+(HC.LIVE.hop||[]).length+' streetcars on the loop. The Hop prints no stop predictions: positions are live, arrivals are not.</div>';
+  } else if(!list.length){
+    rows.innerHTML = '<div id="empty">No stop predictions on this route right now.</div>';
+  } else {
+    list.forEach((r,i)=>{
+      const d = document.createElement("div");
+      d.className = "row"+(r.mins<=2?" hot":"");
+      d.innerHTML = '<span class="sn">'+r.name.toLowerCase()+'</span><span class="via">bus '+r.bus+'</span><span class="eta">'+r.mins+'<small> MIN</small></span>';
+      rows.appendChild(d);
+      setTimeout(()=>d.classList.add("in"), 120+i*60);
+    });
+  }
+  sheet.classList.add("open");
+}
+function closeSheet(){
+  sel = null;
+  document.getElementById("stage").classList.remove("dim");
+  document.querySelectorAll(".sel").forEach(e=>e.classList.remove("sel"));
+  document.getElementById("sheet").classList.remove("open");
+}
+document.getElementById("sx").addEventListener("click", closeSheet);
+document.getElementById("map").addEventListener("click", e=>{ if(e.target.id==="map") closeSheet(); });
+
+function statusLine(live){
+  const el = document.getElementById("status");
+  const late = live.counts ? live.counts.late10 : 0;
+  const ghosts = (live.ghosts||[]).length;
+  el.innerHTML = '<b>'+live.status+'.</b> '+late+' running 10+ late · '+ghosts+' ghost'+(ghosts===1?'':'es')+' on the board';
+  const mv = document.querySelector("#maplive b");
+  if(mv) mv.textContent = live.vehicles.length + (live.hop||[]).length;
+}
+
+async function boot(){
+  S = await HC.loadStatic();
+  const live = await HC.loadLive();
+  document.getElementById("mapcard").classList.add("in");
+  const {gLive, gVeh} = buildMap();
+  const rts = paintLive(gLive, live);
+  paintVehicles(gVeh, live, true);
+  renderChips(rts, live);
+  statusLine(live);
+  requestAnimationFrame(frame);
+  setInterval(async ()=>{
+    try{
+      const l2 = await HC.loadLive();
+      paintVehicles(document.getElementById("gveh"), l2, false);
+      statusLine(l2);
+      if(sel) select(sel);
+    }catch(e){}
+  }, 30000);
+}
+boot();
+})();
+</script>
+</body>
+</html>
