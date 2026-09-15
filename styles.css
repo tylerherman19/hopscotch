@@ -2,3 +2,12 @@
 
 .route-modal{display:none;position:fixed;z-index:80;inset:0}.route-modal.open{display:block}.route-full{position:absolute;inset:7dvh 0 0;background:#fff;border-radius:23px 23px 0 0;padding:25px 20px;overflow:auto}.route-full h2{font-size:22px;margin:4px 0}.route-full>p{color:var(--muted);font-size:12px;margin:0 0 18px}.stop-full{display:grid;grid-template-columns:18px 1fr;gap:12px;min-height:47px;font-size:13px}.stop-full i{width:12px;height:12px;border:3px solid var(--blue);border-radius:50%;position:relative}.stop-full i:after{content:"";position:absolute;top:9px;left:2px;width:2px;height:38px;background:var(--blue)}.stop-full:last-child i:after{display:none}
 #map{display:none!important}#map-fallback{position:absolute;inset:0;z-index:1;background-color:#edf2ef;background-image:linear-gradient(#dfe6e2 1px,transparent 1px),linear-gradient(90deg,#dfe6e2 1px,transparent 1px);background-size:36px 36px;overflow:hidden}#map-fallback:after{content:"";position:absolute;right:-80px;top:0;width:185px;height:100%;background:#b9e1f5;transform:skewX(-7deg)}#fallback-svg{position:absolute;inset:0;z-index:2}.fallback-vehicle{position:absolute;z-index:4;width:28px;height:28px;margin:-14px;background:var(--blue);color:#fff;border:3px solid #fff;border-radius:9px;display:grid;place-items:center;font-size:9px;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.2)}.citylabel,.lakelabel{position:absolute;z-index:3}.citylabel{left:45%;top:45%;font-size:22px;font-weight:700}.lakelabel{right:5px;top:42%;color:#247caf;font-size:11px;font-style:italic;transform:rotate(-90deg)}
+/* Interactive map: real MapLibre canvas is primary; fallback only remains until tiles load or on error. */
+#map{display:block!important;z-index:2;touch-action:none;background:#dfe6e2}
+#map-fallback{z-index:1}
+#map-screen.map-ready #map-fallback{display:none}
+.maplibregl-canvas{outline:none}
+.maplibregl-ctrl-bottom-right{display:block;bottom:276px;right:10px}
+.maplibregl-ctrl-bottom-left{display:block}
+.maplibregl-ctrl-attrib{font-size:8px}
+.maplibregl-popup-content{border-radius:12px;padding:10px 12px;color:#07132f;box-shadow:0 5px 20px rgba(0,0,0,.2)}
