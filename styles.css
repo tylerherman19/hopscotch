@@ -11,3 +11,8 @@
 .maplibregl-ctrl-bottom-left{display:block}
 .maplibregl-ctrl-attrib{font-size:8px}
 .maplibregl-popup-content{border-radius:12px;padding:10px 12px;color:#07132f;box-shadow:0 5px 20px rgba(0,0,0,.2)}
+.map-sheet{will-change:transform;transition:transform .32s cubic-bezier(.22,1,.36,1)}
+.map-sheet.dragging{transition:none;user-select:none}
+.map-sheet .grab{height:22px;width:72px;margin:-16px auto 5px;background:transparent;touch-action:none;cursor:grab;position:relative}
+.map-sheet .grab:after{content:"";position:absolute;left:14px;right:14px;top:9px;height:5px;border-radius:5px;background:#b3bfce}
+.map-sheet.dragging .grab{cursor:grabbing}
