@@ -24,6 +24,8 @@ let selectedDir = "0";
 let focusVehicle = null;
 let refreshTimer = null;
 let tickTimer = null;
+let lastFitKey = "";
+let detailDir = "0";
 let lastFocusedEl = null;
 
 /* ------------------------------------------------------------- helpers -- */
@@ -157,9 +159,11 @@ function nearestOnShape(shape, lat, lon) {
 /* Shape for one direction, as [lat,lon] pairs. */
 function shapeFor(routeId, dir) {
   if (routeId === "HOP") {
+    /* The Hop's "directions" are its two lines, keyed by TransLoc route id
+       ("4", "7"). `dir` already IS that key — indexing the key list with it
+       reads past the end of a two-element array. */
     const lines = (ST.hop && ST.hop.lines) || {};
-    const keys = Object.keys(lines);
-    return keys.length ? lines[keys[Number(dir) % keys.length] || keys[0]] || [] : [];
+    return lines[dir] || lines[Object.keys(lines)[0]] || [];
   }
   const byDir = (ST.shapes || {})[routeId];
   if (!byDir) return [];
@@ -176,8 +180,9 @@ const hasTwoDirections = (routeId) => directionKeys(routeId).length > 1;
 /* Stops served by a route, ordered along the chosen direction's shape. */
 function routeStops(routeId, dir) {
   if (routeId === "HOP") {
+    const line = String(dir || directionKeys("HOP")[0] || "");
     return ((ST.hop && ST.hop.stops) || [])
-      .filter((s) => String(s.route) === String(directionKeys("HOP")[Number(dir)] || ""))
+      .filter((s) => String(s.route) === line)
       .map((s) => [s.id, s.name, s.lat, s.lon]);
   }
   const shape = shapeFor(routeId, dir);
@@ -203,6 +208,10 @@ function routeStops(routeId, dir) {
 
 /* Human name for a direction: the terminal this alignment ends at. */
 function directionLabel(routeId, dir) {
+  if (routeId === "HOP") {
+    const line = ((ST.hop && ST.hop.routes) || []).find((r) => String(r.id) === String(dir));
+    return line ? line.name : "Downtown loop";
+  }
   const shape = shapeFor(routeId, dir);
   if (!shape.length) return routeMeta(routeId).long || "Milwaukee";
   const end = shape[shape.length - 1];
@@ -219,11 +228,14 @@ function directionLabel(routeId, dir) {
 /* Live vehicles on a route. When the route has two alignments, each vehicle is
    assigned to the one its heading matches — a real classification from the
    feed's own bearing field, not a guess at a schedule. */
-function vehiclesFor(routeId, dir) {
-  const all = routeId === "HOP"
+function vehiclesOnRoute(routeId) {
+  return routeId === "HOP"
     ? ((LIVE && LIVE.hop) || []).map((v) => ({ ...v, route: "HOP", bearing: v.heading }))
     : ((LIVE && LIVE.vehicles) || []).filter((v) => String(v.route) === String(routeId));
+}
 
+function vehiclesFor(routeId, dir) {
+  const all = vehiclesOnRoute(routeId);
   const dirs = directionKeys(routeId);
   if (dirs.length < 2) return all;
 
@@ -297,7 +309,7 @@ function toggleSaved(routeId, stopId) {
 
   if (!store.write(list.slice(0, 8))) {
     toast("This browser is blocking storage, so saved routes will not stick.");
-    return i < 0;
+    return "blocked";
   }
   renderSaved();
   return i < 0;
@@ -430,6 +442,8 @@ function renderToday() {
     delete card.dataset.route;
     delete card.dataset.stop;
     $("later").innerHTML = `<p class="row-empty">Nothing scheduled in the current feed window.</p>`;
+    $("view-all").disabled = true;   // the card has no route behind it now
+    renderSaved();                   // saved rows still need their countdowns redrawn
     renderSystem();
     return;
   }
@@ -464,6 +478,7 @@ function renderToday() {
     : `${onRoute.length} vehicles currently on this route`;
   $("show-bus").disabled = false;
   $("save-route").disabled = false;
+  $("view-all").disabled = false;
 
   const delay = vehicle && Number(vehicle.delay);
   const status = $("next-status");
@@ -565,7 +580,9 @@ function renderAlerts() {
 function fillDetails(routeId, stopId) {
   const meta = routeMeta(routeId);
   const preds = predictionsFor(routeId, stopId).slice(0, 5);
-  const onRoute = vehiclesFor(routeId, selectedDir);
+  /* detailDir belongs to THIS route. selectedDir belongs to whatever the map
+     is showing, which is often a different route entirely. */
+  const onRoute = vehiclesFor(routeId, detailDir);
   const sheet = $("details");
 
   sheet.dataset.route = routeId;
@@ -606,6 +623,9 @@ function fillDetails(routeId, stopId) {
 
 function openDetails(routeId, stopId) {
   if (!routeId) return;
+  detailDir = routeId === selectedRoute
+    ? selectedDir
+    : (directionKeys(routeId)[0] || "0");
   fillDetails(routeId, stopId);
   openModal("details");
 }
@@ -614,11 +634,12 @@ function fullRoute() {
   const routeId = $("details").dataset.route || selectedRoute;
   if (!routeId) return;
   const meta = routeMeta(routeId);
-  const stops = routeStops(routeId, selectedDir);
+  const dir = routeId === $("details").dataset.route ? detailDir : selectedDir;
+  const stops = routeStops(routeId, dir);
 
   $("full-title").textContent = `${meta.name} · ${meta.long}`;
   $("full-sub").textContent = stops.length
-    ? `${stops.length} stops · ${directionLabel(routeId, selectedDir)}`
+    ? `${stops.length} stops · ${directionLabel(routeId, dir)}`
     : "Stop sequence is unavailable for this route.";
   $("full-stops").style.setProperty("--c", routeColor(routeId));
   $("full-stops").innerHTML = stops.length
@@ -673,11 +694,22 @@ function renderRouteChips() {
 }
 
 function showMap(routeId, vehicleId) {
-  if (routeId && routeId !== selectedRoute) {
-    selectedRoute = String(routeId);
-    selectedDir = directionKeys(selectedRoute)[0] || "0";
+  const id = routeId ? String(routeId) : selectedRoute;
+  if (id !== selectedRoute) {
+    selectedRoute = id;
+    selectedDir = directionKeys(id)[0] || "0";
   }
-  focusVehicle = vehicleId || null;
+
+  /* Follow the vehicle onto whichever alignment it is actually running.
+     Defaulting to direction 0 filters the focused bus straight back out and
+     leaves an empty map captioned "Showing one vehicle". */
+  focusVehicle = vehicleId ? String(vehicleId) : null;
+  if (focusVehicle) {
+    const v = vehiclesOnRoute(id).find((x) => String(x.id) === focusVehicle);
+    if (v) selectedDir = directionForVehicle(id, v);
+    else focusVehicle = null;   // already gone from the feed: show the whole route
+  }
+
   switchScreen("map-screen");
   renderRouteChips();
   renderMap();
@@ -695,6 +727,12 @@ function switchDirection() {
 
 function renderMap() {
   if (!ST || !selectedRoute) return;
+
+  /* A focused vehicle that has left the feed must not pin the map empty. */
+  if (focusVehicle &&
+      !vehiclesOnRoute(selectedRoute).some((v) => String(v.id) === focusVehicle)) {
+    focusVehicle = null;
+  }
 
   let vehicles = vehiclesFor(selectedRoute, selectedDir);
   if (focusVehicle) vehicles = vehicles.filter((v) => String(v.id) === String(focusVehicle));
@@ -783,10 +821,16 @@ function paintMapLayers(coords, vehicles, stops, color) {
     paint: { "circle-radius": 11, "circle-color": color,
              "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
 
+  /* Fit the camera when the thing being shown changes, not on every refresh —
+     otherwise a 30-second poll throws away whatever the rider panned to. */
+  const fitKey = `${selectedRoute}|${selectedDir}|${focusVehicle || ""}`;
+  const shouldFit = fitKey !== lastFitKey;
+  lastFitKey = fitKey;
+
   const all = coords.concat(
     vehicles.filter((v) => Number.isFinite(v.lon)).map((v) => [v.lon, v.lat])
   );
-  if (all.length) {
+  if (shouldFit && all.length) {
     const bounds = all.reduce(
       (b, c) => b.extend(c), new maplibregl.LngLatBounds(all[0], all[0])
     );
@@ -1016,7 +1060,10 @@ function showFatal(message) {
 
 async function boot() {
   try {
-    const res = await fetch("data/static.json", { cache: "force-cache" });
+    /* "force-cache" serves a stored copy without ever revalidating, so a
+       rebuilt route/stop/shape pack would never reach returning visitors.
+       "default" still hits the cache but honours the ETag. */
+    const res = await fetch("data/static.json", { cache: "default" });
     if (!res.ok) throw new Error(`static data responded ${res.status}`);
     ST = await res.json();
   } catch (err) {
@@ -1085,6 +1132,7 @@ function wire() {
     const card = $("next-card");
     const now = toggleSaved(card.dataset.route, card.dataset.stop);
     if (now === null) { toast("There is no live departure to save yet."); return; }
+    if (now === "blocked") return;   // toggleSaved already explained why
     e.currentTarget.setAttribute("aria-pressed", String(now));
     toast(now ? "Saved to Today" : "Removed from saved routes");
   });
@@ -1110,7 +1158,14 @@ function wire() {
 
   $("route-details").addEventListener("click", () => {
     const stops = routeStops(selectedRoute, selectedDir);
-    const withPrediction = stops.find((s) => predictionsFor(selectedRoute, s[0]).length);
+    /* One pass over the feed, then a set lookup per stop. Calling
+       predictionsFor per stop re-sorted every citywide prediction ~96 times. */
+    const served = new Set(
+      allPredictions()
+        .filter((p) => p.route === String(selectedRoute))
+        .map((p) => String(p.stopId))
+    );
+    const withPrediction = stops.find((s) => served.has(String(s[0])));
     openDetails(selectedRoute, (withPrediction || stops[0] || [])[0]);
   });
 
@@ -1120,15 +1175,17 @@ function wire() {
     const routeId = $("details").dataset.route;
     const dirs = directionKeys(routeId);
     if (dirs.length < 2) return toast("This route only has one alignment in the feed.");
-    if (routeId !== selectedRoute) {
-      selectedRoute = routeId;
-      selectedDir = dirs[0];
-    }
-    selectedDir = dirs[(dirs.indexOf(selectedDir) + 1) % dirs.length];
-    renderMap();
+    if (routeId !== selectedRoute) selectedRoute = routeId;
+    detailDir = dirs[(dirs.indexOf(detailDir) + 1) % dirs.length];
+    selectedDir = detailDir;
+    focusVehicle = null;
     closeModal("details");
+    /* Draw only once the map screen is visible: a hidden container measures
+       0x0, which trips the fitBounds size guard and leaves the camera behind. */
     switchScreen("map-screen");
     renderRouteChips();
+    renderMap();
+    setTimeout(() => { if (map) { map.resize(); renderMap(); } }, 140);
     toast(directionLabel(routeId, selectedDir));
   });
 
