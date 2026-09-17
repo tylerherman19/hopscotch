@@ -139,7 +139,6 @@ for (rid, d), tids in by_rd.items():
 for rid, data in per_route.items():
     data.pop("_svcmap", None)
 # chunk into 8 balanced packs
-import os as _os
 N = 8
 chunks = [dict() for _ in range(N)]
 sizes = [0] * N
@@ -151,7 +150,6 @@ for rid in sorted(per_route, key=lambda r: -len(json.dumps(per_route[r]))):
 for i, c in enumerate(chunks):
     json.dump(c, open(f"{OUT}/tt-{i}.json", "w"), separators=(",", ":"))
 STATIC["tindex"] = {rid: i for i, c in enumerate(chunks) for rid in c}
-json.dump(STATIC, open(f"{OUT}/static.json", "w"), separators=(",", ":"))
 print(f"timetable chunks: {N} for {len(per_route)} routes")
 
 STATIC["stop_routes"] = {k: sorted(v) for k, v in stop_routes.items()}
@@ -180,4 +178,9 @@ for rid in [r["id"] for r in hop["routes"]]:
     hop["lines"][str(rid)] = line
 STATIC["hop"] = hop
 print(f"hop: routes={len(hop['routes'])} stops={len(hop['stops'])}")
+
+# static.json is written last, once every section above has been added to
+# STATIC. Writing it earlier silently drops stop_routes and hop.
+json.dump(STATIC, open(f"{OUT}/static.json", "w"), separators=(",", ":"))
+print(f"wrote {OUT}/static.json with sections: {', '.join(STATIC)}")
 print("done")

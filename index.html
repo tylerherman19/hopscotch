@@ -1,7 +1,272 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f6f8fc"><title>Hopscotch · Milwaukee transit</title><meta name="description" content="Milwaukee buses and The Hop, live."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet"><link rel="stylesheet" href="styles.css?v=20260915d"></head><body><div id="app"><main>
-<section class="screen active" id="today"><header class="todayhead"><div><h1>Hopscotch</h1><p>Milwaukee transit, simplified.</p></div><button class="icon" aria-label="Settings">⚙</button></header><div class="date"><span id="date"></span><span>Milwaukee</span></div><article class="next-card" id="next-card"><div class="routebar"></div><div class="kicker">NEXT UP</div><button class="save" aria-label="Save route">♡</button><h2 id="next-route">Loading live buses…</h2><p id="next-dest">Wisconsin & Plankinton</p><div class="eta"><strong id="next-min">--</strong><span>min</span><b id="next-status">Live</b></div><h3 id="next-stop">Wisconsin & Plankinton</h3><p id="next-away">Checking the feed…</p><div class="progress"><i></i><i></i><i></i><i></i></div><div class="progress-label"><span>You</span><span>next stops</span><span>Destination</span></div><button class="primary" id="show-bus">Show me the bus <span>›</span></button></article><div class="section-title"><h2>Later</h2><button id="view-all">View all</button></div><div class="later" id="later"></div><div class="system"><i></i><div><b>System status</b><span id="sys-status">Reading service alerts…</span></div><span>›</span></div></section>
-<section class="screen" id="map-screen"><div id="map-fallback"><svg id="fallback-svg" viewBox="0 0 390 620" preserveAspectRatio="none"></svg><div id="fallback-vehicles"></div><span class="citylabel">Milwaukee</span><span class="lakelabel">Lake Michigan</span></div><div id="map"></div><div class="route-switch"><button class="on" data-route="30">To school</button><button data-route="14">To home</button><button data-route="14">To the lake</button></div><button class="locate">➤</button><article class="map-sheet"><div class="grab"></div><button class="close-map">×</button><div class="sheet-route"><i></i><div><h2 id="map-route">Route 14</h2><p id="map-dest">Humboldt Blvd · Wisconsin</p></div><b id="map-status">Live</b></div><div class="sheet-eta"><strong id="map-min">--</strong><span>min</span></div><p id="map-away">Live vehicles on the route</p><div class="actions"><button id="route-details">☷ Route details</button></div></article></section>
-<section class="screen" id="alerts"><div class="simple-head"><h1>Alerts</h1><p>Milwaukee service, right now.</p></div><div id="alerts-list" class="alerts-list"><article><i></i><div><h2>Live service feed</h2><p>Loading active detours and system notices…</p></div></article></div><p class="honesty">Route alerts are read from the public MCTS feed. Saved push alerts are not available yet.</p></section>
-</main><nav class="tabs"><button class="on" data-screen="today"><span>⌂</span>Today</button><button data-screen="map-screen"><span>▰</span>Map</button><button data-screen="alerts"><span>♧</span>Alerts</button></nav></div>
-<div class="modal" id="details"><div class="scrim"></div><article class="detail-sheet"><div class="grab"></div><button class="x" id="detail-x">×</button><div class="sheet-route"><i></i><div><h2 id="detail-route">Route 14</h2><p id="detail-dest">To the lake</p></div><b id="detail-status">Live</b></div><div class="sheet-eta"><strong id="detail-min">--</strong><span>min</span></div><p id="detail-away">Live from Wisconsin & Plankinton</p><div class="actions"><button id="detail-map">▰ Show on map</button></div><h3 class="upcoming-title">Upcoming arrivals</h3><div class="arrivals" id="arrivals"></div><div class="detail-actions"><button id="full-route">☷ <span>Full route & stops</span>›</button><button>⇄ <span>Switch direction</span>›</button><button id="share">⇧ <span>Share this route</span>›</button></div><div class="updated" id="updated">◷ Updated just now</div></article></div><div class="route-modal" id="route-modal"><div class="scrim"></div><article class="route-full"><button class="x" id="route-x">×</button><h2 id="full-title">Full route & stops</h2><p id="full-sub"></p><div id="full-stops"></div></article></div>
-<div class="toast" id="toast"></div><script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script><script src="ios-app.js?v=20260915d"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f5f7fb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a1220" media="(prefers-color-scheme: dark)">
+<title>Hopscotch — Milwaukee transit, live</title>
+<meta name="description" content="Every Milwaukee County bus and Hop streetcar on one map, with live arrival predictions.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="mask-icon" href="favicon.svg" color="#0868ef">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=20260917">
+</head>
+<body>
+
+<svg class="sprite" aria-hidden="true" focusable="false" width="0" height="0">
+  <defs>
+    <g id="i-home" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3.4 10.2 12 3.6l8.6 6.6"/><path d="M5.6 9v10.4h12.8V9"/><path d="M9.8 19.4v-5.2h4.4v5.2"/>
+    </g>
+    <g id="i-map" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 3.8 3.6 6v14.2L9 18l6 2.2 5.4-2.2V3.8L15 6Z"/><path d="M9 3.8V18"/><path d="M15 6v14.2"/>
+    </g>
+    <g id="i-alert" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18.4 15.2V10a6.4 6.4 0 1 0-12.8 0v5.2L3.9 17.6h16.2Z"/><path d="M10 20.4a2.2 2.2 0 0 0 4 0"/>
+    </g>
+    <g id="i-chevron" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9.5 5.2 16.3 12l-6.8 6.8"/>
+    </g>
+    <g id="i-heart" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 20.1 4.6 12.7a4.6 4.6 0 0 1 6.5-6.5l.9.9.9-.9a4.6 4.6 0 0 1 6.5 6.5Z"/>
+    </g>
+    <g id="i-locate" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3.4"/><circle cx="12" cy="12" r="7.8"/>
+      <path d="M12 1.8v2.6M12 19.6v2.6M22.2 12h-2.6M4.4 12H1.8"/>
+    </g>
+    <g id="i-close" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6.6 6.6 17.4 17.4M17.4 6.6 6.6 17.4"/>
+    </g>
+    <g id="i-list" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 6.4h11M9 12h11M9 17.6h11"/><path d="M4.4 6.4h.01M4.4 12h.01M4.4 17.6h.01"/>
+    </g>
+    <g id="i-swap" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 8.4h13.2l-3.4-3.4"/><path d="M20 15.6H6.8l3.4 3.4"/>
+    </g>
+    <g id="i-share" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 15.4V3.9"/><path d="m8.2 7.7 3.8-3.8 3.8 3.8"/><path d="M5.6 13.2v6.9h12.8v-6.9"/>
+    </g>
+    <g id="i-clock" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="8.4"/><path d="M12 7.2V12l3.2 2"/>
+    </g>
+  </defs>
+</svg>
+
+<div id="app">
+<main>
+
+  <!-- Today -->
+  <section class="screen is-active" id="today" aria-label="Today">
+    <header class="page-head">
+      <div>
+        <h1>Hopscotch</h1>
+        <p>Milwaukee transit, simplified.</p>
+      </div>
+      <div class="live-dot" id="feed-badge" role="status">
+        <i></i><span id="feed-label">Connecting</span>
+      </div>
+    </header>
+
+    <div class="meta-row">
+      <span id="date"></span>
+      <span id="fleet-count">Milwaukee</span>
+    </div>
+
+    <article class="next-card is-loading" id="next-card" aria-labelledby="next-route">
+      <span class="route-rule" id="next-rule"></span>
+      <div class="next-top">
+        <p class="kicker">Next up</p>
+        <button class="save-btn" id="save-route" type="button" aria-pressed="false" aria-label="Save this route">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-heart"/></svg>
+        </button>
+      </div>
+      <h2 id="next-route">Reading the live feed</h2>
+      <p class="next-sub" id="next-dest">Connecting to Milwaukee County Transit</p>
+      <div class="eta">
+        <strong id="next-min" aria-describedby="next-min-unit">--</strong>
+        <span id="next-min-unit">min</span>
+        <b class="pill" id="next-status">Live</b>
+      </div>
+      <h3 class="next-stop" id="next-stop">&nbsp;</h3>
+      <p class="next-away" id="next-away">Checking arrival predictions…</p>
+      <div class="journey" id="journey" aria-label="Upcoming stops for this vehicle"></div>
+      <button class="btn-primary" id="show-bus" type="button">
+        <span>Show me the bus</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron"/></svg>
+      </button>
+    </article>
+
+    <section class="block" id="saved-block" hidden aria-labelledby="saved-title">
+      <div class="block-head"><h2 id="saved-title">Saved routes</h2></div>
+      <div class="row-list" id="saved-list"></div>
+    </section>
+
+    <section class="block" aria-labelledby="later-title">
+      <div class="block-head">
+        <h2 id="later-title">Later</h2>
+        <button class="link-btn" id="view-all" type="button">View all</button>
+      </div>
+      <div class="row-list" id="later"></div>
+    </section>
+
+    <button class="system-row" id="system-row" type="button">
+      <i id="system-dot"></i>
+      <span>
+        <b>System status</b>
+        <small id="sys-status">Reading service alerts…</small>
+      </span>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron"/></svg>
+    </button>
+  </section>
+
+  <!-- Map -->
+  <section class="screen" id="map-screen" aria-label="Live map">
+    <div id="map-fallback" aria-hidden="true">
+      <svg id="fallback-svg" viewBox="0 0 390 620" preserveAspectRatio="none"></svg>
+      <div id="fallback-vehicles"></div>
+      <span class="label-city">Milwaukee</span>
+      <span class="label-lake">Lake Michigan</span>
+    </div>
+    <div id="map" role="application" aria-label="Interactive map of live vehicles"></div>
+
+    <div class="route-switch" id="route-switch" role="tablist" aria-label="Choose a route"></div>
+
+    <button class="locate-btn" id="locate" type="button" aria-label="Center the map on my location">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-locate"/></svg>
+    </button>
+
+    <article class="sheet map-sheet" id="map-sheet" aria-label="Route summary">
+      <div class="grab" id="sheet-grab"></div>
+      <div class="sheet-route">
+        <i id="map-rule"></i>
+        <div>
+          <h2 id="map-route">Loading route</h2>
+          <p id="map-dest">Reading live vehicle positions…</p>
+        </div>
+        <b class="pill" id="map-status">Live</b>
+      </div>
+      <div class="sheet-eta">
+        <strong id="map-min">--</strong><span id="map-min-unit">vehicles</span>
+      </div>
+      <p class="sheet-note" id="map-away">Live vehicles on this route</p>
+      <div class="actions">
+        <button class="btn-soft" id="route-details" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-list"/></svg>
+          <span>Route details</span>
+        </button>
+        <button class="btn-soft" id="map-direction" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-swap"/></svg>
+          <span>Switch direction</span>
+        </button>
+      </div>
+    </article>
+  </section>
+
+  <!-- Alerts -->
+  <section class="screen" id="alerts" aria-label="Service alerts">
+    <header class="page-head">
+      <div>
+        <h1>Alerts</h1>
+        <p>Milwaukee service, right now.</p>
+      </div>
+    </header>
+    <div id="alerts-list" class="alerts-list">
+      <article class="alert-card is-loading">
+        <i></i>
+        <div><h2>Live service feed</h2><p>Loading active detours and system notices…</p></div>
+      </article>
+    </div>
+    <p class="footnote">Alerts are read directly from the public MCTS feed. Push notifications are not available yet.</p>
+  </section>
+
+</main>
+
+<nav class="tabs" aria-label="Sections">
+  <button class="is-on" data-screen="today" type="button" aria-current="page">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg>Today
+  </button>
+  <button data-screen="map-screen" type="button">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-map"/></svg>Map
+  </button>
+  <button data-screen="alerts" type="button">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-alert"/></svg>Alerts
+  </button>
+</nav>
+</div>
+
+<!-- Route detail sheet -->
+<div class="modal" id="details" role="dialog" aria-modal="true" aria-labelledby="detail-route" hidden>
+  <div class="scrim" data-close="details"></div>
+  <article class="sheet detail-sheet">
+    <div class="grab" aria-hidden="true"></div>
+    <button class="icon-btn close" data-close="details" type="button" aria-label="Close route details">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-close"/></svg>
+    </button>
+    <div class="sheet-route">
+      <i id="detail-rule"></i>
+      <div>
+        <h2 id="detail-route">Route</h2>
+        <p id="detail-dest"></p>
+      </div>
+      <b class="pill" id="detail-status">Live</b>
+    </div>
+    <div class="sheet-eta"><strong id="detail-min">--</strong><span id="detail-min-unit">min</span></div>
+    <p class="sheet-note" id="detail-away"></p>
+
+    <h3 class="section-label">Upcoming arrivals</h3>
+    <div class="arrivals" id="arrivals"></div>
+
+    <div class="detail-actions">
+      <button id="detail-map" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-map"/></svg>
+        <span>Show on map</span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron"/></svg>
+      </button>
+      <button id="full-route" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-list"/></svg>
+        <span>Full route &amp; stops</span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron"/></svg>
+      </button>
+      <button id="detail-direction" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-swap"/></svg>
+        <span>Switch direction</span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron"/></svg>
+      </button>
+      <button id="share" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-share"/></svg>
+        <span>Share this route</span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron"/></svg>
+      </button>
+    </div>
+
+    <p class="updated" id="updated">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-clock"/></svg>
+      <span>Checking feed age…</span>
+    </p>
+  </article>
+</div>
+
+<!-- Full route list -->
+<div class="modal" id="route-modal" role="dialog" aria-modal="true" aria-labelledby="full-title" hidden>
+  <div class="scrim" data-close="route-modal"></div>
+  <article class="route-full">
+    <button class="icon-btn close" data-close="route-modal" type="button" aria-label="Close stop list">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-close"/></svg>
+    </button>
+    <h2 id="full-title">Full route &amp; stops</h2>
+    <p id="full-sub"></p>
+    <div id="full-stops"></div>
+  </article>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="ios-app.js?v=20260917"></script>
+</body>
+</html>
