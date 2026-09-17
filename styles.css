@@ -205,6 +205,22 @@ main { min-height: 100dvh; }
   font-weight: 500;
 }
 
+.stale-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--amber-wash);
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.45;
+}
+.stale-notice[hidden] { display: none; }
+.stale-notice svg { width: 15px; height: 15px; flex: none; margin-top: 1px; }
+
 /* ------------------------------------------------------------ next card -- */
 .next-card {
   position: relative;

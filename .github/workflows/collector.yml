@@ -2,7 +2,12 @@ name: collector
 
 on:
   schedule:
-    - cron: "17 */6 * * *"
+    # Every 20 minutes. GitHub runs scheduled workflows on a best-effort basis
+    # and routinely fires them hours late, so the previous "17 */6 * * *" left
+    # multi-hour holes in the feed every time a slot slipped: the job ran its
+    # 350 minutes, exited, and nothing collected until the next fire landed.
+    # Firing often means a missed slot costs minutes instead of hours.
+    - cron: "*/20 * * * *"
   workflow_dispatch:
     inputs:
       testsms:
@@ -16,12 +21,14 @@ permissions:
 
 concurrency:
   group: collector
-  cancel-in-progress: true
+  # Never kill a healthy collector to start another one. A new run waits for
+  # the current one to finish and then takes over, so coverage is continuous.
+  cancel-in-progress: false
 
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 355
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -42,5 +49,5 @@ jobs:
           if [ "${{ github.event.inputs.testsms }}" = "true" ]; then
             python3 collector.py testsms
           else
-            python3 collector.py loop 350
+            python3 collector.py loop 25
           fi

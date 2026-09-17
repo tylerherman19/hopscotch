@@ -528,12 +528,27 @@ def load_state():
     state["job_start"] = n.hour * 3600 + n.minute * 60 + n.second
     return state
 
+def daily_due():
+    """The day whose summary still needs building, or None.
+
+    Decided from the committed summary.json rather than a process-local flag,
+    so it fires correctly however long an individual collector job runs. The
+    old check compared against a variable set at loop start, which could only
+    ever be true for a process that spanned midnight."""
+    n = now_ct()
+    if n.hour < 3 or (n.hour == 3 and n.minute < 55):
+        return None
+    yesterday = (n - timedelta(days=1)).strftime("%Y%m%d")
+    want = f"{yesterday[0:4]}-{yesterday[4:6]}-{yesterday[6:8]}"
+    if load_json(f"{LIVE}/summary.json", {}).get("date") == want:
+        return None
+    return yesterday
+
 def loop(minutes):
     ensure_data_branch()
     state = load_state()
     end = time.time() + minutes * 60
     last_push = 0
-    last_daily_day = today_key()
     while time.time() < end:
         try:
             poll_cycle(state)
@@ -543,11 +558,11 @@ def loop(minutes):
             git("pull", "--rebase", "origin", "data", check=False)
             push_live()
             last_push = time.time()
-        if now_ct().hour == 3 and now_ct().minute >= 55 and today_key() != last_daily_day:
+        due = daily_due()
+        if due:
             # The date has rolled over; summarize the complete day we just finished.
-            try: build_daily((now_ct() - timedelta(days=1)).strftime("%Y%m%d"))
+            try: build_daily(due)
             except Exception as e: print(f"daily error: {e}", file=sys.stderr)
-            last_daily_day = today_key()
         time.sleep(POLL_SECS)
 
 if __name__ == "__main__":
