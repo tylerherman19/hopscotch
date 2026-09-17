@@ -2,15 +2,15 @@ name: collector
 
 on:
   schedule:
-    # Three times an hour, deliberately off the top of the hour. GitHub runs
-    # scheduled workflows on a best-effort basis and its own docs single out
-    # "the start of every hour" as the high-load window to avoid, so :00 is
-    # the worst minute to ask for. "*/20" lands on :00 and was not honoured
-    # for over an hour; :07/:27/:47 keeps three chances an hour off-peak.
+    # Asking three times an hour does not get three runs an hour. Measured over
+    # 14 hours, GitHub honoured 4 of ~43 requested fires: it services this
+    # workflow roughly every 3-4 hours no matter how often the cron asks.
     #
-    # The earlier "17 */6 * * *" gave only four chances a day, so each slip
-    # left a multi-hour hole: the job ran its 350 minutes, exited, and nothing
-    # collected until the next fire landed.
+    # So the loop length, not the cron frequency, is what determines coverage.
+    # Each run collects for its full 350 minutes and the next fire queues
+    # behind it (see concurrency below), which is what keeps the feed
+    # continuous. Keeping a frequent cron only means a run that does land has
+    # a good chance of landing soon after the previous one ended.
     - cron: "7,27,47 * * * *"
   workflow_dispatch:
     inputs:
@@ -34,7 +34,7 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
 
@@ -55,5 +55,5 @@ jobs:
           if [ "${{ github.event.inputs.testsms }}" = "true" ]; then
             python3 collector.py testsms
           else
-            python3 collector.py loop 25
+            python3 collector.py loop 350
           fi
