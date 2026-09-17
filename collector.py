@@ -88,20 +88,6 @@ def load_static():
 def active_services(calendar, datekey):
     return set(calendar.get(datekey, []))
 
-def scheduled_trips_today(calendar, routes):
-    """All (trip start seconds, route_id, headsign) for today, from committed timetables."""
-    svcs = active_services(calendar, today_key())
-    out = []
-    for rid in routes:
-        safe = rid.replace("/", "_")
-        tt = load_json(f"data/timetable/{safe}.json", None)
-        if not tt: continue
-        for tr in tt.get("trips", []):
-            if tr["s"] in svcs and tr["t"]:
-                out.append({"route": rid, "start": tr["t"][0],
-                            "headsign": tt.get("headsign", {}).get(tr["k"].split(".")[0], "")})
-    return out
-
 # ---------- one poll cycle ----------
 
 def plain_alert(entity):
