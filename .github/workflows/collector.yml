@@ -2,12 +2,16 @@ name: collector
 
 on:
   schedule:
-    # Every 20 minutes. GitHub runs scheduled workflows on a best-effort basis
-    # and routinely fires them hours late, so the previous "17 */6 * * *" left
-    # multi-hour holes in the feed every time a slot slipped: the job ran its
-    # 350 minutes, exited, and nothing collected until the next fire landed.
-    # Firing often means a missed slot costs minutes instead of hours.
-    - cron: "*/20 * * * *"
+    # Three times an hour, deliberately off the top of the hour. GitHub runs
+    # scheduled workflows on a best-effort basis and its own docs single out
+    # "the start of every hour" as the high-load window to avoid, so :00 is
+    # the worst minute to ask for. "*/20" lands on :00 and was not honoured
+    # for over an hour; :07/:27/:47 keeps three chances an hour off-peak.
+    #
+    # The earlier "17 */6 * * *" gave only four chances a day, so each slip
+    # left a multi-hour hole: the job ran its 350 minutes, exited, and nothing
+    # collected until the next fire landed.
+    - cron: "7,27,47 * * * *"
   workflow_dispatch:
     inputs:
       testsms:
