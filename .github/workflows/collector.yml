@@ -24,9 +24,11 @@ permissions:
   contents: write
 
 concurrency:
-  group: collector
-  # Never kill a healthy collector to start another one. A new run waits for
-  # the current one to finish and then takes over, so coverage is continuous.
+  # The loop owns one group so a new run waits for the current one and takes
+  # over, keeping coverage continuous rather than killing a healthy collector.
+  # The testsms dispatch gets its own group: it is a five-second job and has no
+  # business queueing behind up to 25 minutes of collecting.
+  group: collector-${{ github.event.inputs.testsms == 'true' && 'testsms' || 'loop' }}
   cancel-in-progress: false
 
 jobs:
