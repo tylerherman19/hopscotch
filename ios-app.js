@@ -378,7 +378,13 @@ function renderStaleNotice() {
    the feed's `next` array. Renders nothing when the feed carries none. */
 function renderJourney(vehicle, routeId) {
   const strip = $("journey");
-  const upcoming = (vehicle && Array.isArray(vehicle.next) ? vehicle.next : []).slice(0, 4);
+  /* Only stops still ahead of the vehicle. A stalled feed's next-stop list is
+     all in the past, and clamping those to zero renders four nodes reading
+     "Now" — a strip claiming the bus is at four stops at once. */
+  const now = wallNow();
+  const upcoming = (vehicle && Array.isArray(vehicle.next) ? vehicle.next : [])
+    .filter((n) => n.at > now)
+    .slice(0, 4);
   if (upcoming.length < 2) { strip.innerHTML = ""; return; }
 
   strip.style.setProperty("--c", routeColor(routeId));
