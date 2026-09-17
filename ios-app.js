@@ -10,7 +10,8 @@
 "use strict";
 
 const LIVE_URL   = "https://raw.githubusercontent.com/tylerherman19/hopscotch/data/live.json";
-const REFRESH_MS = 30000;
+const REFRESH_MS = 30000;   // how often we re-fetch the feed
+const TICK_MS    = 15000;   // how often the countdown is redrawn from the clock
 const SAVED_KEY  = "hopscotch.saved.v1";
 const STALE_SECS = 180;
 
@@ -22,6 +23,7 @@ let selectedRoute = "";
 let selectedDir = "0";
 let focusVehicle = null;
 let refreshTimer = null;
+let tickTimer = null;
 let lastFocusedEl = null;
 
 /* ------------------------------------------------------------- helpers -- */
@@ -54,20 +56,30 @@ function toast(message) {
   toast._t = setTimeout(() => el.classList.remove("is-shown"), 2400);
 }
 
-const feedNow = () => (LIVE && LIVE.ts) || Math.floor(Date.now() / 1000);
+/* Countdowns are measured against the wall clock, NOT against LIVE.ts. A
+   prediction is a promise about a moment in time; if the feed stops updating,
+   that moment still arrives and passes. Measuring against the feed's own
+   timestamp freezes every number at whatever it read when the feed stalled,
+   which shows a rider "2 min" for a bus that left twenty minutes ago. */
+const wallNow = () => Math.floor(Date.now() / 1000);
+
+/* Seconds since the collector last wrote live.json. */
+const feedAge = () => (LIVE && LIVE.ts ? Math.max(0, wallNow() - LIVE.ts) : Infinity);
 
 /* GTFS ships stop names in caps ("DR. M.L.K DRIVE & MCKINLEY"). Title-case
    them without flattening transit acronyms, directional codes or Mc- names. */
 const ACRONYMS = new Set([
   "MLK", "BRT", "UWM", "MSOE", "MATC", "MCTS", "VA", "US", "AM", "PM", "JR", "SR",
   "NE", "NW", "SE", "SW", "N", "S", "E", "W",
+  "KK",   // Kinnickinnic Avenue, spelled this way on 59 stop signs
+  "FD",   // Fire Department
 ]);
 
 function titleCaseToken(token) {
   const bare = token.replace(/[^A-Za-z0-9.]/g, "");
   if (!bare) return token;
   if (ACRONYMS.has(bare.toUpperCase())) return token.toUpperCase();
-  if (/^[NSEW]\d+[A-Za-z]?$/.test(bare)) return token.toUpperCase();        // N68, S57
+  if (/^[NSEW]\d+[A-Za-z]{0,2}$/.test(bare)) return token.toUpperCase();    // N68, S57, S9PL
   if (/^(?:[A-Za-z]\.){2,}[A-Za-z]?\.?$/.test(bare)) return token.toUpperCase(); // M.L.K
   let out = token.toLowerCase();
   if (/^[a-z]/.test(out)) out = out[0].toUpperCase() + out.slice(1);        // leaves "14th"
@@ -96,7 +108,13 @@ function stopName(stopId) {
   return row ? titleCase(row[1]) : "Milwaukee stop";
 }
 
-const minutesUntil = (epoch) => Math.max(0, Math.round((epoch - feedNow()) / 60));
+const minutesUntil = (epoch) => Math.max(0, Math.round((epoch - wallNow()) / 60));
+
+/* Milwaukee is America/Chicago; the rider may not be. Always show its clock. */
+const clockFmt = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric", minute: "2-digit", timeZone: "America/Chicago",
+});
+const clockAt = (epoch) => clockFmt.format(new Date(epoch * 1000));
 
 function etaLabel(mins) {
   if (mins <= 0) return "Now";
@@ -246,7 +264,7 @@ function directionForVehicle(routeId, vehicle) {
 
 /* Every upcoming departure in the feed, soonest first. */
 function allPredictions() {
-  const now = feedNow();
+  const now = wallNow();
   const out = [];
   for (const [stopId, preds] of Object.entries((LIVE && LIVE.stops) || {})) {
     for (const p of preds) {
@@ -295,12 +313,13 @@ function renderSaved() {
     const meta = routeMeta(s.route);
     const next = predictionsFor(s.route, s.stop)[0];
     const eta = next ? etaLabel(next.mins) + (next.mins > 0 ? " min" : "") : "No prediction";
+    const when = next ? ` · ${clockAt(next.at)}` : "";
     return `<button class="row" type="button" data-route="${esc(s.route)}" data-stop="${esc(s.stop)}"
         style="--c:${esc(routeColor(s.route))}">
       <i></i>
       <span class="label">
         <b>${esc(meta.name)} · ${esc(meta.long)}</b>
-        <small>${esc(stopName(s.stop))}</small>
+        <small>${esc(stopName(s.stop))}${esc(when)}</small>
       </span>
       <strong>${esc(eta)}</strong>
       <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron"/></svg>
@@ -318,11 +337,19 @@ function bindRows(container) {
 
 /* ---------------------------------------------------------- Today screen -- */
 
+function ageLabel(seconds) {
+  const mins = Math.round(seconds / 60);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.round(mins / 60);
+  return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+}
+
 function renderFeedBadge() {
   const badge = $("feed-badge");
   const label = $("feed-label");
   if (!LIVE) { badge.dataset.state = "down"; label.textContent = "Offline"; return; }
-  const age = Math.max(0, Math.floor(Date.now() / 1000 - LIVE.ts));
+  const age = feedAge();
   if (age <= STALE_SECS) {
     badge.dataset.state = "live";
     label.textContent = "Live";
@@ -331,6 +358,20 @@ function renderFeedBadge() {
     const mins = Math.round(age / 60);
     label.textContent = mins < 60 ? `${mins} min old` : `${Math.round(mins / 60)} h old`;
   }
+}
+
+/* When the collector stalls, say so plainly and name the time it stopped —
+   an empty departure board with no explanation reads as a broken app. */
+function renderStaleNotice() {
+  const banner = $("stale-notice");
+  const age = feedAge();
+  if (!LIVE || age <= STALE_SECS) { banner.hidden = true; return; }
+  const at = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric", minute: "2-digit", timeZone: "America/Chicago",
+  }).format(new Date(LIVE.ts * 1000));
+  banner.hidden = false;
+  banner.querySelector("span").textContent =
+    `Live feed last updated ${ageLabel(age)}, at ${at}. Arrival times are only as fresh as the feed, so some may already have passed.`;
 }
 
 /* The journey strip: the focused vehicle's own next stops, straight from
@@ -363,14 +404,20 @@ function renderToday() {
 
   if (!preds.length) {
     card.classList.remove("is-loading");
-    $("next-route").textContent = "No live departures right now";
-    $("next-dest").textContent = "The feed is connected but reporting no upcoming arrivals.";
+    const stalled = feedAge() > STALE_SECS;
+    $("next-route").textContent = stalled ? "The live feed has stopped updating" : "No live departures right now";
+    $("next-dest").textContent = stalled
+      ? `Last snapshot was ${ageLabel(feedAge())}.`
+      : "The feed is connected but reporting no upcoming arrivals.";
     $("next-min").textContent = "--";
     $("next-stop").textContent = "";
-    $("next-away").textContent = "This is normal overnight and between service periods.";
+    $("next-away").textContent = feedAge() > STALE_SECS
+      ? "Every prediction in the last snapshot has already passed. Waiting for the collector to publish a new one."
+      : "This is normal overnight and between service periods.";
     $("next-status").textContent = "Quiet";
     $("next-status").dataset.tone = "quiet";
     $("journey").innerHTML = "";
+    renderStaleNotice();
     $("show-bus").disabled = true;
     $("save-route").disabled = true;
     $("save-route").setAttribute("aria-pressed", "false");
@@ -426,14 +473,15 @@ function renderToday() {
   /* Later — the next distinct route/stop pairs after the headline one */
   /* One row per route, and far enough out to actually read as "later" —
      otherwise the citywide feed fills this list with four more "Now"s. */
+  /* Next departures on other routes, soonest first. An earlier version forced
+     each row to be a minute later than the last, which made this list always
+     read 2/3/4/5 regardless of the feed — a constant dressed up as data. */
   const seen = new Set([next.route]);
   const later = [];
-  let floor = 1;
   for (const p of preds.slice(1)) {
-    if (seen.has(p.route) || p.mins <= floor) continue;
+    if (seen.has(p.route)) continue;
     seen.add(p.route);
     later.push(p);
-    floor = p.mins;          // a ladder, not four rows all reading "2 min"
     if (later.length === 4) break;
   }
 
@@ -444,7 +492,7 @@ function renderToday() {
       <i></i>
       <span class="label">
         <b>${esc(m.name)} · ${esc(m.long)}</b>
-        <small>${esc(stopName(p.stopId))}</small>
+        <small>${esc(stopName(p.stopId))} · ${esc(clockAt(p.at))}</small>
       </span>
       <strong>${esc(etaLabel(p.mins))}${p.mins > 0 ? " min" : ""}</strong>
       <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron"/></svg>
@@ -452,6 +500,7 @@ function renderToday() {
   }).join("") : `<p class="row-empty">No other departures in the feed right now.</p>`;
 
   bindRows($("later"));
+  renderStaleNotice();
   renderSaved();
   renderSystem();
 }
@@ -507,8 +556,7 @@ function renderAlerts() {
 
 /* ------------------------------------------------------- details modal -- */
 
-function openDetails(routeId, stopId) {
-  if (!routeId) return;
+function fillDetails(routeId, stopId) {
   const meta = routeMeta(routeId);
   const preds = predictionsFor(routeId, stopId).slice(0, 5);
   const onRoute = vehiclesFor(routeId, selectedDir);
@@ -534,21 +582,25 @@ function openDetails(routeId, stopId) {
     ? preds.map((p) => `<div class="arrival">
         <b>${esc(etaLabel(p.mins))}${p.mins > 0 ? " min" : ""}</b>
         <i></i>
-        <span>${esc(stopName(p.stopId))}</span>
+        <span>${esc(stopName(p.stopId))} · ${esc(clockAt(p.at))}</span>
       </div>`).join("")
     : `<p class="row-empty">The feed carries no upcoming departures for this stop.</p>`;
 
-  const age = Math.max(0, Math.round(Date.now() / 1000 - (LIVE ? LIVE.ts : 0)));
+  const age = feedAge();
   $("updated").querySelector("span").textContent = age < 120
     ? `Live feed updated ${age} seconds ago`
-    : `Feed last updated ${Math.round(age / 60)} minutes ago`;
+    : `Live feed last updated ${ageLabel(age)}`;
 
   const dirBtn = $("detail-direction");
   dirBtn.disabled = !hasTwoDirections(routeId);
   dirBtn.querySelector("span").textContent = hasTwoDirections(routeId)
     ? "Switch direction"
     : "Single direction route";
+}
 
+function openDetails(routeId, stopId) {
+  if (!routeId) return;
+  fillDetails(routeId, stopId);
   openModal("details");
 }
 
@@ -915,6 +967,17 @@ async function loadLive() {
   return res.json();
 }
 
+/* Redraw the countdowns from the clock between fetches, so the numbers move
+   even while the feed is unchanged — and keep moving when it has stalled. */
+function tick() {
+  if (!ST || !LIVE) return;
+  renderToday();
+  const sheet = $("details");
+  if (!sheet.hidden && sheet.dataset.route) {
+    fillDetails(sheet.dataset.route, sheet.dataset.stop);
+  }
+}
+
 async function refresh() {
   try {
     LIVE = await loadLive();
@@ -983,6 +1046,11 @@ async function boot() {
   refreshTimer = setInterval(() => {
     if (document.visibilityState === "visible") refresh();
   }, REFRESH_MS);
+
+  clearInterval(tickTimer);
+  tickTimer = setInterval(() => {
+    if (document.visibilityState === "visible") tick();
+  }, TICK_MS);
 }
 
 /* ------------------------------------------------------------- wiring -- */
