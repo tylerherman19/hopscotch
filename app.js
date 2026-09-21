@@ -38,10 +38,14 @@ const ctNowSec = () => {
 };
 const fmtClock = (epoch) => ctFmt.format(new Date(epoch * 1000)).replace(" ", "").toLowerCase();
 const STOP_WORDS = new Set(["&", "at", "of", "the", "de", "st", "ave", "av"]);
+function fixAcronyms(s) {
+  return s.replace(/\buwm\b/gi, "UWM").replace(/\bbrt\b/gi, "BRT").replace(/\bmcts\b/gi, "MCTS").replace(/\bubus\b/gi, "UBus");
+}
 function titleCase(s) {
   s = String(s || "");
-  if (!s || s !== s.toUpperCase()) return s; // only fix shouty GTFS names
-  return s.toLowerCase().replace(/(^|\s|[-/&])([a-z])/g, (m, p, c) => p + c.toUpperCase()).replace(/\bSt\b/g, "St.").replace(/\bAve\b/g, "Ave.").replace(/\buwm\b/gi, "UWM").replace(/\bbrt\b/gi, "BRT").replace(/\bmcts\b/gi, "MCTS").replace(/\bubus\b/gi, "UBus");
+  if (!s) return s;
+  if (s === s.toUpperCase()) s = s.toLowerCase().replace(/(^|\s|[-/&])([a-z])/g, (m, p, c) => p + c.toUpperCase()).replace(/\bSt\b/g, "St.").replace(/\bAve\b/g, "Ave.");
+  return fixAcronyms(s);
 }
 function fmtIn(sec) {
   if (sec < 45) return "due";
