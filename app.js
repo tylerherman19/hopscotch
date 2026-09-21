@@ -41,7 +41,7 @@ const STOP_WORDS = new Set(["&", "at", "of", "the", "de", "st", "ave", "av"]);
 function titleCase(s) {
   s = String(s || "");
   if (!s || s !== s.toUpperCase()) return s; // only fix shouty GTFS names
-  return s.toLowerCase().replace(/(^|\s|[-/&])([a-z])/g, (m, p, c) => p + c.toUpperCase()).replace(/\bSt\b/g, "St.").replace(/\bAve\b/g, "Ave.").replace(/\bUwm\b/g, "UWM").replace(/\bBrt\b/g, "BRT").replace(/\bMcts\b/g, "MCTS");
+  return s.toLowerCase().replace(/(^|\s|[-/&])([a-z])/g, (m, p, c) => p + c.toUpperCase()).replace(/\bSt\b/g, "St.").replace(/\bAve\b/g, "Ave.").replace(/\buwm\b/gi, "UWM").replace(/\bbrt\b/gi, "BRT").replace(/\bmcts\b/gi, "MCTS").replace(/\bubus\b/gi, "UBus");
 }
 function fmtIn(sec) {
   if (sec < 45) return "due";
@@ -414,7 +414,7 @@ function renderSheet() {
   badge.classList.toggle("hop", !!st.hop);
   badge.innerHTML = `<svg><use href="#${st.hop ? "i-tram" : "i-bus"}"/></svg>`;
   const dir = st.hop ? "" : tripDir(v.trip);
-  const hs = st.hop ? "The Hop" : (tripHs(v.trip) || "").replace(/^To /i, "");
+  const hs = st.hop ? "The Hop" : titleCase((tripHs(v.trip) || "").replace(/^To /i, ""));
   $("sh-title").textContent = st.hop ? "THE HOP" : (dirWord(st.route, dir) || (st.route + (hs ? " · " + hs : "")));
   $("sh-sub").textContent = (st.hop ? (v.name || "Streetcar " + v.id) : "Vehicle #" + v.id) + (hs && !st.hop ? " · " + hs : "");
   const [cls, txt] = st.hop ? (st.v.delayed ? ["warn", "Delayed"] : ["ok", "Out now"]) : pillFor(st.delay);
@@ -470,7 +470,7 @@ function tickSheetEta() {
       $("co-head").textContent = "The Hop";
       $("co-eta").textContent = "streetcar";
     } else {
-      $("co-head").textContent = (tripHs(st.v.trip) || "Route " + st.route).replace(/^To /i, "");
+      $("co-head").textContent = titleCase((tripHs(st.v.trip) || "Route " + st.route).replace(/^To /i, ""));
       $("co-eta").textContent = n ? fmtIn(Math.max(0, Math.round(n.at - now))) + " to " + (titleCase(n.name) || "your stop") : "signal lost";
     }
   }
