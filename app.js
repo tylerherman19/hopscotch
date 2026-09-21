@@ -19,6 +19,7 @@ const S = {
   showBus: true, showHop: true, fails: 0, lastPoll: 0, pollTimer: null,
   map: null, vlayer: null, slayer: null, proj: null, lastFrame: 0,
   _railVeh: null, _railStop: null,
+  tripSel: { dest: "school", dir: "to" }, // My trips selector, persisted
 };
 
 const $ = (id) => document.getElementById(id);
@@ -698,45 +699,66 @@ async function refresh() {
 }
 
 /* ================= trips tab ================= */
-function legPrediction(leg) {
-  if (!S.live || !leg) return null;
-  if (leg.kind === "hop") {
-    const p = ((S.live.hop_stops || {})[String(leg.board)] || [])[0];
-    return p ? { in: p[0], at: p[1], live: true } : null;
-  }
-  const p = ((S.live.stops || {})[leg.board] || []).filter((x) => leg.routes.includes(x[0])).sort((a, b) => a[1] - b[1])[0];
-  return p ? { in: p[1], at: p[2], live: true, trip: p[3], route: p[0] } : null;
+const TRIP_IDS = { school: { to: "helen-law", back: "law-helen" }, lake: { to: "helen-lake", back: "lake-helen" } };
+const WALK_MIN = 2; // walk from Helen's house to the stop, per hotroutes legs
+function selTrip() {
+  const id = (TRIP_IDS[S.tripSel.dest] || TRIP_IDS.school)[S.tripSel.dir] || "helen-law";
+  return (S.hot || []).find((t) => t.id === id) || null;
+}
+// Prediction at the stop that touches Helen's house: boarding stop for the
+// outbound leg, alighting stop for the ride back.
+function helenEta(t) {
+  if (!S.live || !t) return null;
+  const leg = t.legs.find((l) => l.kind !== "walk");
+  if (!leg) return null;
+  const sid = String(S.tripSel.dir === "back" ? leg.alight : leg.board);
+  const p = ((S.live.stops || {})[sid] || []).filter((x) => (leg.routes || []).includes(x[0])).sort((a, b) => a[1] - b[1])[0];
+  return p ? { in: p[1], at: p[2], live: true, trip: p[3], route: p[0], sid, stopName: (S.stops[sid] || {}).name || "her stop" } : null;
+}
+function markTripSel() {
+  document.querySelectorAll(".tripselbtn").forEach((b) =>
+    b.classList.toggle("on", S.tripSel[b.dataset.sel] === b.dataset.v));
 }
 function renderTrips() {
   const el = $("trips"); if (!el || !S.hot) return;
-  el.innerHTML = S.hot.map((t) => {
-    const leg = t.legs.find((l) => l.kind !== "walk");
-    const pred = legPrediction(leg);
-    const line = leg.kind === "hop" ? "Hop streetcar" : "Bus " + leg.routes.join(" or ");
-    const big = pred
-      ? `<span class="t" data-at="${Math.round(pred.at)}">${esc(fmtIn(pred.in))}</span><span class="lbl">until it reaches you</span>`
-      : `<span class="t sched">—</span><span class="lbl">no live bus listed yet</span>`;
-    const meta = pred ? `<span>Leaves <b>${esc(fmtClock(pred.at))}</b></span><span>At ${esc(t.to)} about <b>${esc(fmtClock(pred.at + (t.travel_min || 20) * 60))}</b></span>` : "";
-    const steps = t.legs.map((l) => `<div>${l.kind === "walk" ? esc(l.text) : "<b>" + esc(l.text) + "</b>"}</div>`).join("");
-    return `<div class="trip">
-      <div class="tline">${esc(line.toUpperCase())}${t.route_note ? " · " + esc(t.route_note) : ""}</div>
-      <h3>${esc(t.name)}</h3>
-      <div class="troute">${esc(t.from)} to ${esc(t.to)}</div>
-      <div class="tnext">${big}</div><div class="tmeta">${meta}</div>
-      <div class="tsteps">${steps}</div>
-      <div class="tactions">
-        <button class="btn ghost" data-a="map" data-t="${esc(t.id)}">See route</button>
-        <button class="btn ghost" data-a="follow" data-t="${esc(t.id)}" ${pred?.trip ? "" : "disabled"}>${pred?.trip ? "Follow bus" : "No bus"}</button>
-        <button class="btn ghost" data-a="notify" data-t="${esc(t.id)}">Notify me</button>
-      </div></div>`;
-  }).join("");
+  markTripSel();
+  const t = selTrip();
+  if (!t) { el.innerHTML = '<div class="empty">No trip selected.</div>'; return; }
+  const leg = t.legs.find((l) => l.kind !== "walk");
+  const pred = helenEta(t);
+  const back = S.tripSel.dir === "back";
+  let big, meta;
+  if (pred) {
+    const leaveBy = back ? pred.at : pred.at - WALK_MIN * 60;
+    const routesText = "the " + (leg.routes || []).join(" or ");
+    big = `<span class="t" data-at="${Math.round(leaveBy)}">${esc(fmtIn(leaveBy - Date.now() / 1000))}</span><span class="lbl">${back ? "until she is outside Helen's" : "until she needs to be outside Helen's"}</span>`;
+    meta = back
+      ? `<span>Bus ${esc(routesText)} pulls into ${esc(pred.stopName)} <b>${esc(fmtClock(pred.at))}</b></span>`
+      : `<span>Bus ${esc(routesText)} reaches ${esc(pred.stopName)} <b>${esc(fmtClock(pred.at))}</b></span><span>At ${esc(t.to)} about <b>${esc(fmtClock(pred.at + (t.travel_min || 20) * 60))}</b></span>`;
+  } else {
+    big = `<span class="t sched">—</span><span class="lbl">no live bus listed yet</span>`;
+    meta = "";
+  }
+  const line = leg.kind === "hop" ? "Hop streetcar" : "Bus " + leg.routes.join(" or ");
+  const steps = t.legs.map((l) => `<div>${l.kind === "walk" ? esc(l.text) : "<b>" + esc(l.text) + "</b>"}</div>`).join("");
+  el.innerHTML = `<div class="trip">
+    <div class="tline">${esc(line.toUpperCase())}${t.route_note ? " · " + esc(t.route_note) : ""}</div>
+    <h3>${esc(t.name)}</h3>
+    <div class="troute">${esc(t.from)} to ${esc(t.to)}</div>
+    <div class="tnext">${big}</div><div class="tmeta">${meta}</div>
+    <div class="tsteps">${steps}</div>
+    <div class="tactions">
+      <button class="btn ghost" data-a="map" data-t="${esc(t.id)}">See route</button>
+      <button class="btn ghost" data-a="follow" data-t="${esc(t.id)}" ${pred?.trip ? "" : "disabled"}>${pred?.trip ? "Follow bus" : "No bus"}</button>
+      <button class="btn ghost" data-a="notify" data-t="${esc(t.id)}">Notify me</button>
+    </div></div>`;
   el.querySelectorAll("[data-a]").forEach((b) => b.addEventListener("click", () => {
     const t = S.hot.find((x) => x.id === b.dataset.t);
     const leg = t?.legs.find((l) => l.kind !== "walk");
     if (!t || !leg) return;
     if (b.dataset.a === "map") { isolateRoute(leg.kind === "hop" ? "HOP" : leg.routes[0]); switchTab("departures"); }
     if (b.dataset.a === "follow") {
-      const p = legPrediction(leg);
+      const p = helenEta(t);
       const st = [...S.veh.values()].find((s) => !s.hop && String(s.v.trip) === String(p?.trip));
       if (st) { selectVehicle(st.id); startFollow(st.id); }
     }
@@ -891,6 +913,13 @@ async function boot() {
     await loadStatic();
   } catch (e) { console.error(e); $("board-error").hidden = false; $("board-error-text").textContent = "STATIC DATA FAILED TO LOAD · RETRYING"; return; }
   try { S.hot = (await fetchJson("data/hotroutes.json")).routes || []; } catch { S.hot = []; }
+  const saved = storeJson("hop_trip_sel", null);
+  if (saved && TRIP_IDS[saved.dest] && TRIP_IDS[saved.dest][saved.dir]) S.tripSel = saved;
+  document.querySelectorAll(".tripselbtn").forEach((b) => b.addEventListener("click", () => {
+    S.tripSel[b.dataset.sel] = b.dataset.v;
+    store.set("hop_trip_sel", JSON.stringify(S.tripSel));
+    renderTrips();
+  }));
   S.near = [...nearRoutes(), "HOP"].filter((r, i, a) => a.indexOf(r) === i);
   wireUI();
   await loadTtFor(S.near.filter((r) => r !== "HOP"));
