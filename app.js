@@ -716,8 +716,11 @@ function helenEta(t) {
   return p ? { in: p[1], at: p[2], live: true, trip: p[3], route: p[0], sid, stopName: (S.stops[sid] || {}).name || "her stop" } : null;
 }
 function markTripSel() {
-  document.querySelectorAll(".tripselbtn").forEach((b) =>
-    b.classList.toggle("on", S.tripSel[b.dataset.sel] === b.dataset.v));
+  const destWord = S.tripSel.dest === "school" ? "school" : "the lake";
+  document.querySelectorAll(".tripselbtn").forEach((b) => {
+    b.classList.toggle("on", S.tripSel[b.dataset.sel] === b.dataset.v);
+    if (b.dataset.sel === "dir") b.textContent = b.dataset.v === "to" ? "To " + destWord : "Back home";
+  });
 }
 function renderTrips() {
   const el = $("trips"); if (!el || !S.hot) return;
