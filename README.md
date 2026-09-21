@@ -1,19 +1,19 @@
 # Hopscotch
 
-Live Milwaukee transit: every county bus and Hop streetcar on one map, with
-arrival predictions read straight from the public feeds.
+Milwaukee, live: real-time MCTS buses and The Hop streetcar, in your pocket.
 
 **https://tylerherman19.github.io/hopscotch/**
 
 ## How it works
 
 Hopscotch is a static site. There is no backend at request time — the page
-reads two snapshots and renders them.
+reads snapshots and renders them.
 
 | File | Branch | Written by | Contents |
 | --- | --- | --- | --- |
 | `data/static.json` | `main` | `build_static.py` | Routes, stops, per-direction shapes, service calendar, Hop lines |
-| `data/tt-*.json` | `main` | `build_static.py` | Per-route timetable packs, balanced across eight files |
+| `data/hotroutes.json` | `main` | by hand | His saved trips (school, lake) as stop-to-stop legs |
+| `data/tt-*.json` | `main` | `build_static.py` | Per-route timetable packs |
 | `live.json` | `data` | `collector.py` | Vehicle positions, stop predictions, service alerts |
 
 `collector.py` runs on a schedule in GitHub Actions, polls the MCTS GTFS-Realtime
@@ -25,9 +25,9 @@ a collector outage degrades to a stale-feed notice rather than a broken page.
 
 | File | Role |
 | --- | --- |
-| `index.html` | The whole app: Today, Map and Alerts |
-| `styles.css` | Design tokens and every component style, light and dark |
-| `ios-app.js` | Data loading, rendering, map, and interaction |
+| `index.html` | The whole app shell: Home, Map, tab bar, SVG icon sprite |
+| `styles.css` | Design tokens and every component style |
+| `app.js` | Data loading, rendering, map, and interaction |
 | `system.html` | Legacy entry point that redirects to the map |
 
 ## Running it locally
