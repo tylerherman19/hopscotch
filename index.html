@@ -10,7 +10,28 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap" rel="stylesheet">
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<style>
+/* critical: keep icons icon-sized even if the external stylesheet is stale/missing */
+svg{width:20px;height:20px;flex:none}
+svg.squiggle{width:100%;height:12px}
+.iconbtn svg{width:24px;height:24px}
+.intro-ic{width:26px;height:26px}
+.introcard .chev{width:18px;height:18px}
+.tabbtn svg{width:25px;height:25px}
+.rc-big svg{width:22px;height:22px}
+.rc-stop svg{width:17px;height:17px}
+.followbtn svg{width:17px;height:17px}
+.update-card svg{width:21px;height:21px}
+.searchbar svg{width:17px;height:17px}
+.navbtn svg{width:20px;height:20px}
+.segbtn svg{width:16px;height:16px}
+.roundbtn svg{width:19px;height:19px}
+.veh svg{width:16px;height:16px}
+.busbadge svg{width:22px;height:22px}
+.following svg{width:18px;height:18px}
+.bigbtn svg{width:17px;height:17px}
+</style>
+<link rel="stylesheet" href="styles.css?v=20260921-2">
 </head>
 <body>
 
@@ -146,6 +167,6 @@
 </div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=20260921-2"></script>
 </body>
 </html>
