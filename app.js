@@ -332,6 +332,11 @@ function renderSearch(q){
   const routes=S.routes.filter(r=>!q||String(r.name).toLowerCase().includes(q)||(r.long||'').toLowerCase().includes(q)).sort((a,b)=>(a.name.toLowerCase()===q?-1:0)-(b.name.toLowerCase()===q?-1:0)).slice(0,6);
   const stops=q?Object.entries(S.stops).filter(([id,s])=>id.toLowerCase()===q||s.name.toLowerCase().includes(q)||id.includes(q)).sort((a,b)=>(a[0]===q?-1:0)-(b[0]===q?-1:0)||distance(position(),[a[1].lat,a[1].lon])-distance(position(),[b[1].lat,b[1].lon])).slice(0,8):[];
   box.innerHTML=routes.map(r=>`<button class="sr-row" data-r="${esc(r.id)}"><span class="sr-badge">${esc(r.name)}</span><span>${esc(titleCase(r.long))}</span></button>`).join('')+stops.map(([id,s])=>`<button class="sr-row" data-stop="${esc(id)}"><svg><use href="#${hopStop(id)?'i-tram':'i-stop'}"/></svg><span>${esc(s.name)}<small>Stop ${esc(id)}</small></span></button>`).join('')||'<div class="empty">No matching routes or stops.</div>';
+  // A precise stop number takes priority over partial route-number matches.
+  if(!S.routes.some(r=>String(r.id).toLowerCase()===q || String(r.name).toLowerCase()===q)) {
+    const exact=[...box.querySelectorAll('[data-stop]')].find(b=>b.dataset.stop.toLowerCase()===q);
+    if(exact)box.prepend(exact);
+  }
   box.hidden=false;wireStopChoices(box);
   box.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>showRoute(b.dataset.r));
   box.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{box.hidden=true;$('searchinput').value='';}));

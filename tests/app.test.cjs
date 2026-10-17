@@ -70,7 +70,10 @@ test('raster map initializes, searches and selects routes without WebGL',async()
  try {
   w.document.querySelector('[data-screen="map"]').click();
   assert.ok(w.document.querySelector('.leaflet-container'));
-  const search=w.document.getElementById('searchinput');search.value='14';search.dispatchEvent(new w.Event('input'));
+  const search=w.document.getElementById('searchinput');
+  search.value='5';search.dispatchEvent(new w.Event('input'));
+  assert.equal(w.document.querySelector('#searchresults button').dataset.stop,'5');
+  search.value='14';search.dispatchEvent(new w.Event('input'));
   w.document.querySelector('#searchresults [data-r="14"]').click();
   await new Promise(r=>setTimeout(r,60));
   assert.equal(w.document.getElementById('sh-title').textContent,'Route 14');
