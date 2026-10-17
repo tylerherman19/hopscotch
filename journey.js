@@ -6,7 +6,9 @@
   function access(endpoint,stops){
     if(endpoint.kind==='stop')return stops[endpoint.stop]?[{id:endpoint.stop,walk:0}]:[];
     if(!Number.isFinite(endpoint.lat)||!Number.isFinite(endpoint.lon))return [];
-    return Object.entries(stops).map(([id,s])=>({id,distance:meters(endpoint,s)})).filter(x=>x.distance<=650).sort((a,b)=>a.distance-b.distance).slice(0,8).map(x=>({id:x.id,walk:Math.ceil(x.distance*1.25/1.2)}));
+    // Several lines can share one platform. Keep every walkable stop so those
+    // duplicate platforms cannot crowd a useful bus stop out of the search.
+    return Object.entries(stops).map(([id,s])=>({id,distance:meters(endpoint,s)})).filter(x=>x.distance<=650).sort((a,b)=>a.distance-b.distance).map(x=>({id:x.id,walk:Math.ceil(x.distance*1.25/1.2)}));
   }
   function plan({packs,calendar,stops,live,hop,from,to,now=Date.now()/1000,limit=5}){
     const origins=access(from,stops),destinations=new Map(access(to,stops).map(x=>[x.id,x.walk]));

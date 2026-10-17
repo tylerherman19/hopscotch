@@ -166,14 +166,14 @@ window.Experience=(()=>{
     document.querySelectorAll('[data-near-filter]').forEach(b=>b.onclick=()=>{E.filter=b.dataset.nearFilter;document.querySelectorAll('[data-near-filter]').forEach(x=>x.setAttribute('aria-pressed',x===b));renderHome();});
     $('plan-from').value=E.from.name;
     for(const which of ['from','to']){
-      const field=$('plan-'+which);field.onfocus=()=>picker(which);field.oninput=()=>{E[which]=null;E.results=[];$('plan-results').replaceChildren();picker(which);};
+      const field=$('plan-'+which);field.onfocus=()=>picker(which);field.oninput=()=>{E[which]=null;E.results=[];$('plan-results').replaceChildren();$('plan-status').textContent='Choose a starting point and destination from the suggestions.';picker(which);};
       field.onkeydown=e=>{const options=[...$('picker-'+which).querySelectorAll('button')];if(e.key==='Enter'&&!$('picker-'+which).hidden){e.preventDefault();options[0]?.click();}if(e.key==='Escape')$('picker-'+which).hidden=true;if(e.key==='ArrowDown'){e.preventDefault();options[0]?.focus();}};
-      $('picker-'+which).onkeydown=e=>{const options=[...$('picker-'+which).querySelectorAll('button')],index=options.indexOf(document.activeElement);if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();options[(index+(e.key==='ArrowDown'?1:-1)+options.length)%options.length]?.focus();}if(e.key==='Escape'){$('picker-'+which).hidden=true;field.focus();}};
+      $('picker-'+which).onkeydown=e=>{const options=[...$('picker-'+which).querySelectorAll('button')],index=options.indexOf(document.activeElement);if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();options[(index+(e.key==='ArrowDown'?1:-1)+options.length)%options.length]?.focus();}if(e.key==='Escape'){field.focus();$('picker-'+which).hidden=true;}};
     }
     $('trip-form').onsubmit=e=>{e.preventDefault();$('picker-from').hidden=$('picker-to').hidden=true;runPlan();};
     $('plan-swap').onclick=()=>{[E.from,E.to]=[E.to,E.from];$('plan-from').value=E.from?.name||'';$('plan-to').value=E.to?.name||'';E.results=[];$('plan-results').replaceChildren();$('plan-status').textContent='Choose Find a trip to check the return journey.';};
     $('planner-location').onclick=()=>{E.locating=true;locate();};
-    document.addEventListener('click',e=>{if(!e.target.closest('.endpoint-wrap')){$('picker-from').hidden=true;$('picker-to').hidden=true;}});
+    document.addEventListener('click',e=>{if(!e.target.closest('.endpoint-wrap, #where-to, .stop-plan-actions')){$('picker-from').hidden=true;$('picker-to').hidden=true;}});
     renderHome();renderJourneys();
   }
   function located(){

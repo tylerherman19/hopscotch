@@ -34,6 +34,12 @@ test('walking access cannot board a bus before the rider can reach it',()=>{
  assert.deepEqual(J.plan(f),[]);
  assert.ok(J.access(f.from,stops).some(x=>x.walk>120));
 });
+test('clustered platforms do not hide other walkable boarding and destination stops',()=>{
+ const nearby={...stops};
+ for(let i=0;i<10;i++){nearby['H'+i]={lat:43.0001,lon:-87.9};nearby['Hend'+i]={lat:43.0101,lon:-87.9};}
+ const r=J.plan(base({stops:nearby,from:{kind:'place',lat:43.0001,lon:-87.9},to:{kind:'place',lat:43.0101,lon:-87.9}}))[0];
+ assert.ok(r);assert.equal(r.legs[0].board,'A');assert.equal(r.legs[0].alight,'C');assert.equal(r.transfers,0);
+});
 test('no calendar coverage and unknown stops never invent a journey',()=>{
  assert.deepEqual(J.plan(base({calendar:{}})),[]);assert.deepEqual(J.plan(base({from:stop('missing')})),[]);
 });

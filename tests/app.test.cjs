@@ -118,6 +118,11 @@ test('trip planner finds a real stop-to-stop journey, saves it locally and opens
  try {
   const $=id=>w.document.getElementById(id);
   $('where-to').click();assert.ok($('screen-plan').classList.contains('on'));
+  assert.equal($('picker-to').hidden,false,'Where to keeps destination suggestions open');
+  const choice=$('picker-to').querySelector('button');choice.focus();
+  choice.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  assert.equal($('picker-to').hidden,true,'Escape closes suggestions and returns focus');
+  assert.equal(w.document.activeElement,$('plan-to'));
   for(const [field,value] of [['from','5'],['to','9643']]){
    const input=$('plan-'+field);input.value=value;input.dispatchEvent(new w.Event('input'));
    const options=[...$('picker-'+field).querySelectorAll('button')];
