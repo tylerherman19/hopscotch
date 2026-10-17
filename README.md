@@ -61,7 +61,7 @@ The map uses the bundled Leaflet 1.9.4 renderer, OpenStreetMap data and standard
 
 ## Data correctness
 
-`transit.js` handles Central-time service dates (including after-midnight GTFS times), explicit calendar exceptions, destination eligibility, cancellation/skipped-stop suppression and live/schedule merging by trip instance. Schema-2 snapshots separate realtime predictions from timetable fallback. Legacy mixed snapshots are treated as schedule-only.
+`transit.js` handles Central-time service dates (including after-midnight GTFS times), explicit calendar exceptions, destination eligibility, cancellation/skipped-stop suppression and live/schedule merging by trip instance. Schema-2 snapshots separate realtime predictions from timetable fallback. If a raw branch URL serves stale data, the browser resolves the current data commit through GitHub at most once per 90 seconds and fetches that immutable snapshot. A cached older snapshot never replaces newer data. Legacy mixed snapshots are treated as schedule-only.
 
 The collector preserves independent source timestamps and partial failures. The Hop's `VehicleEstimates` are live predictions; its `ScheduledTimes` remain labeled scheduled. Streetcar predictions are attached to stops, never to an unrelated selected car.
 

@@ -403,3 +403,6 @@ html.frozen * { animation: none !important; transition: none !important; }
 .stopdot.hop-stop::after { border-color:var(--green-ink); }
 #callout { max-width:80%;white-space:normal; }
 #callout .co-txt { min-width:0; }
+
+/* Search results must stay above segmented map controls and details. */
+.map-top { z-index:800; }
