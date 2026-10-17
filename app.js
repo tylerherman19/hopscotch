@@ -76,8 +76,8 @@ function initMap() {
     return;
   }
   S.map=L.map('map',{zoomControl:false,preferCanvas:false}).setView(MILWAUKEE,14);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
-    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',maxZoom:19
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',maxZoom:19
   }).on('tileerror',()=>{$('map-error').hidden=false;}).on('load',()=>{$('map-error').hidden=true;}).addTo(S.map);
   L.control.zoom({position:'bottomright'}).addTo(S.map);
   S.lines=L.layerGroup().addTo(S.map);

@@ -57,7 +57,7 @@ result to `main`; the collector reads these files on its next run.
 - Follow a bus or streetcar's reported GPS position. Positions are never extrapolated beyond the agency report. A missing signal does not confirm a cancellation.
 - Route lines show published alignments, which may differ during detours. Service alerts retain closed-stop details; consult the linked agency information when data is unavailable.
 
-The map uses the bundled Leaflet 1.9.4 renderer, OpenStreetMap data and CARTO raster tiles, so it does not require WebGL. A map-tile outage does not prevent searching for departure boards.
+The map uses the bundled Leaflet 1.9.4 renderer, OpenStreetMap data and standard raster tiles, so it does not require WebGL. A map-tile outage does not prevent searching for departure boards.
 
 ## Data correctness
 
