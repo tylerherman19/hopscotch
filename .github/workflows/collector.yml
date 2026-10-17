@@ -1,6 +1,9 @@
 name: collector
 
 on:
+  push:
+    branches: [main]
+    paths: [collector.py, .github/workflows/collector.yml]
   schedule:
     # Asking three times an hour does not get three runs an hour. Measured over
     # 14 hours, GitHub honoured 4 of ~43 requested fires: it services this
@@ -29,7 +32,7 @@ concurrency:
   # The testsms dispatch gets its own group: it is a five-second job and has no
   # business queueing behind up to 25 minutes of collecting.
   group: collector-${{ github.event.inputs.testsms == 'true' && 'testsms' || 'loop' }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   collect:

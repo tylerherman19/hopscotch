@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap" rel="stylesheet">
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<link href="vendor/leaflet/leaflet.css" rel="stylesheet">
 <style>
 /* critical: keep icons icon-sized even if the external stylesheet is stale/missing */
 svg{width:20px;height:20px;flex:none}
@@ -31,7 +31,7 @@ svg.squiggle{width:100%;height:12px}
 .following svg{width:18px;height:18px}
 .bigbtn svg{width:17px;height:17px}
 </style>
-<link rel="stylesheet" href="styles.css?v=20260921-2">
+<link rel="stylesheet" href="styles.css?v=20261016-1">
 </head>
 <body>
 
@@ -74,8 +74,14 @@ svg.squiggle{width:100%;height:12px}
         <svg class="chev"><use href="#i-chev"/></svg>
       </button>
 
+      <div class="feed-bar"><span id="feed-status">Connecting to transit feeds…</span><button id="btn-refresh">Refresh</button></div>
+      <div id="start-error" class="error-card" hidden>Route data could not load. Check your connection. <button id="retry-start">Try again</button></div>
+      <p id="schedule-warning" class="error-card" hidden>Today's date is outside the published timetable. Only current live predictions are available.</p>
+      <div class="sect"><h2>Saved stops</h2></div>
+      <div id="favorites"></div>
+      <div id="pinned-routes" class="route-chips" aria-label="Saved routes"></div>
       <div class="sect">
-        <h2>Your saved routes</h2>
+        <h2>Suggested trips</h2>
         <button id="btn-edit" class="linkbtn">Edit</button>
       </div>
       <div id="saved"></div>
@@ -86,19 +92,22 @@ svg.squiggle{width:100%;height:12px}
       </div>
       <div id="updates"></div>
 
-      <p class="datacredit">Live data: MCTS GTFS-Realtime + The Hop, refreshed about every 60&nbsp;seconds.</p>
+      <p class="datacredit">MCTS + The Hop agency feeds · Checked every 15 seconds while open. Times are Central. Scheduled departures are estimates, not live tracking.</p>
     </div>
   </main>
 
   <!-- ================= MAP ================= -->
   <main id="screen-map" class="screen">
     <div id="map"></div>
+    <div id="map-error" class="map-error" hidden>Map tiles are unavailable. Search routes and stops to view departures.</div>
+    <div class="map-status"><span id="map-feed-status">Connecting…</span></div>
+    <div id="nearby-panel" hidden></div>
 
     <div class="map-top">
       <div class="searchwrap">
         <div class="searchbar">
           <svg><use href="#i-search"/></svg>
-          <input id="searchinput" type="text" placeholder="Search routes, stops, or places" autocomplete="off" aria-label="Search routes and stops">
+          <input id="searchinput" type="text" placeholder="Search a route, stop name, or stop number" autocomplete="off" aria-label="Search routes and stops">
         </div>
         <div id="searchresults" hidden></div>
       </div>
@@ -106,7 +115,7 @@ svg.squiggle{width:100%;height:12px}
     </div>
 
     <div class="segwrap">
-      <div class="seg" role="tablist" aria-label="Map view">
+      <div class="seg" role="group" aria-label="Map view">
         <button class="segbtn on" data-view="buses"><svg><use href="#i-bus"/></svg>Buses</button>
         <button class="segbtn" data-view="hop"><svg><use href="#i-tram"/></svg>The Hop</button>
         <button class="segbtn" data-view="nearby"><svg><use href="#i-pin"/></svg>Nearby</button>
@@ -125,7 +134,8 @@ svg.squiggle{width:100%;height:12px}
     </div>
 
     <div id="sheet" hidden>
-      <div id="sheetgrab"><span></span></div>
+      <button id="sheetgrab" aria-label="Expand or collapse details"><span></span></button>
+      <button id="sheet-close" class="sheet-close" aria-label="Close details">Close</button>
       <div class="sheet-body">
         <div class="sheet-head">
           <span id="sh-badge" class="busbadge"><svg><use href="#i-bus"/></svg></span>
@@ -153,20 +163,21 @@ svg.squiggle{width:100%;height:12px}
   </nav>
 
   <!-- ================= SETTINGS ================= -->
-  <div id="settings" hidden>
+  <div id="settings" role="dialog" aria-modal="true" aria-label="Settings" hidden>
     <div class="setcard">
       <div class="sethead"><b>Settings</b><button id="set-close" class="linkbtn">Done</button></div>
       <div id="set-feed" class="setfeed">Connecting…</div>
       <label class="setrow"><span>Show stop dots on map</span><input type="checkbox" id="set-stops" checked></label>
       <label class="setrow"><span>Reduce motion</span><input type="checkbox" id="set-motion"></label>
-      <p class="setnote">Positions come from the MCTS and Hop live feeds by way of the Hopscotch collector. When the feed is stale this page says so instead of guessing.</p>
+      <p class="setnote">Positions come from the MCTS and Hop live feeds by way of the Hopscotch collector. Markers show reported GPS positions. Live predictions expire after three minutes. Saved stops and routes stay on this device.</p>
     </div>
   </div>
 
   <div id="toast" role="status"></div>
 </div>
 
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=20260921-4"></script>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="transit.js?v=20261016-1"></script>
+<script src="app.js?v=20261016-1"></script>
 </body>
 </html>
