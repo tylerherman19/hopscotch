@@ -25,7 +25,8 @@ async function app({failSchedule=false,failLive=false,map=false,staleRaw=false}=
   };
   if(map) { w.SVGSVGElement.prototype.createSVGRect=()=>({});w.eval(fs.readFileSync('vendor/leaflet/leaflet.js','utf8')); }
   w.eval(fs.readFileSync('transit.js','utf8'));
-  w.eval(fs.readFileSync('app.js','utf8'));
+  w.eval(fs.readFileSync('journey.js','utf8'));
+  w.eval(fs.readFileSync('app.js','utf8')+'\n'+fs.readFileSync('experience.js','utf8'));
   await new Promise(resolve=>setTimeout(resolve,120));
   return {w,dom,errors,live,apiCalls:()=>apiCalls};
 }
@@ -97,6 +98,53 @@ test('stale branch cache recovers by commit and never replaces newer data with o
   await new Promise(r=>setTimeout(r,60));
   assert.equal(apiCalls(),1);
   assert.ok(w.document.getElementById('feed-status').classList.contains('live'));
+  assert.deepEqual(errors,[]);
+ }finally{dom.window.close();}
+});
+
+test('nearby boards show directional lines and streetcar filtering',async()=>{
+ const {w,dom,errors}=await app();
+ try {
+  assert.ok(w.document.querySelectorAll('#nearby-lines .line-row').length>=4);
+  w.document.querySelector('[data-near-filter="hop"]').click();
+  const badges=[...w.document.querySelectorAll('#nearby-lines .line-badge')];
+  assert.ok(badges.length>0);assert.ok(badges.every(b=>b.textContent==='H'));
+  assert.deepEqual(errors,[]);
+ }finally{dom.window.close();}
+});
+
+test('trip planner finds a real stop-to-stop journey, saves it locally and opens its board',async()=>{
+ const {w,dom,errors}=await app();
+ try {
+  const $=id=>w.document.getElementById(id);
+  $('where-to').click();assert.ok($('screen-plan').classList.contains('on'));
+  for(const [field,value] of [['from','5'],['to','9643']]){
+   const input=$('plan-'+field);input.value=value;input.dispatchEvent(new w.Event('input'));
+   const options=[...$('picker-'+field).querySelectorAll('button')];
+   const option=options.find(b=>b.textContent.includes('Stop '+value));assert.ok(option);option.click();
+  }
+  $('trip-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  await new Promise(r=>setTimeout(r,200));
+  assert.ok($('plan-results').querySelectorAll('.journey-card').length>0,$('plan-status').textContent);
+  $('plan-results').querySelector('[data-save-journey]').click();
+  const saved=JSON.parse(w.localStorage.getItem('hop_journeys'));assert.equal(saved[0].from.stop,'5');assert.equal(saved[0].to.stop,'9643');
+  assert.ok($('personal-journeys').textContent.includes('Wisconsin'));
+  $('plan-results').querySelector('[data-leg]').click();await new Promise(r=>setTimeout(r,30));
+  assert.equal($('sh-sub').textContent,'MCTS · Stop 5');assert.ok($('plan-from-stop'));assert.ok($('plan-to-stop'));
+  $('plan-to-stop').click();assert.ok($('screen-plan').classList.contains('on'));assert.equal($('plan-results').children.length,0);
+  assert.deepEqual(errors,[]);
+ }finally{dom.window.close();}
+});
+
+test('route direction changes the ordered stop list',async()=>{
+ const {w,dom,errors}=await app();
+ try {
+  const input=w.document.getElementById('searchinput');input.value='14';input.dispatchEvent(new w.Event('input'));
+  w.document.querySelector('#searchresults [data-r="14"]').click();await new Promise(r=>setTimeout(r,50));
+  const select=w.document.getElementById('route-direction');assert.equal(select.options.length,2);
+  const first=w.document.querySelector('.ordered-stop').dataset.stop;
+  select.value=select.options[1].value;select.dispatchEvent(new w.Event('change'));
+  assert.notEqual(w.document.querySelector('.ordered-stop').dataset.stop,first);
   assert.deepEqual(errors,[]);
  }finally{dom.window.close();}
 });

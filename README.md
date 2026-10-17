@@ -78,3 +78,13 @@ python3 -m py_compile collector.py build_static.py
 ```
 
 CI runs the same checks for pull requests. The collector's existing SMS watches are preserved; no new notification subscriptions are created by the app.
+
+## Transit-inspired rider experience
+
+The **Nearby** screen puts direction-specific arrivals first. Agency route colors, large countdowns and explicit live/scheduled labels make the next ride easy to scan. Use the location button to recenter discovery; it never requests location automatically. The default is clearly identified as Downtown Milwaukee.
+
+The **Plan** screen searches bus/streetcar stops and a small set of public destination anchors. Pick both suggestions before planning. It supports direct MCTS journeys, one-transfer MCTS journeys (including short walks between stops), and direct Hop journeys when the same live streetcar is reported at both stops. It does not include arbitrary address geocoding or multi-transfer routing. Walking is a distance-based estimate, not a routed pedestrian path.
+
+`journey.js` checks service dates, stop order, boarding access time, cancellations, skipped stops, real-time updates and a two-minute connection buffer in addition to transfer walking time. Unreported arrival times remain explicitly estimated. The planner refreshes open results as new snapshots arrive. Save journeys on this device and reopen them to calculate new departure options.
+
+Route details now have direction selection and stops in travel order. Every stop board can become the start or destination of a trip. On wider screens, Nearby and Plan appear alongside the live map; on phones, the three views remain separate full-screen pages.
