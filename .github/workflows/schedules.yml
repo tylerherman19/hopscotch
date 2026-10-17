@@ -1,0 +1,37 @@
+name: Refresh published timetables
+on:
+  schedule:
+    - cron: '43 10 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: refresh-schedules
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download agency timetable
+        run: curl --fail --location --retry 3 --max-time 120 -o /tmp/gtfs.zip https://kamino.mcts.org/gtfs/google_transit.zip
+      - name: Build every route pattern
+        run: python3 build_static.py /tmp/gtfs.zip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify commute stop order
+        run: node --test tests/transit.test.cjs
+      - name: Publish updated schedule files
+        run: |
+          git config user.name "hopscotch-bot"
+          git config user.email "actions@github.com"
+          git add data/static.json data/tt-*.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Refresh agency timetables"
+            git push origin HEAD:main
+          fi

@@ -6,13 +6,12 @@ Milwaukee, live: real-time MCTS buses and The Hop streetcar, in your pocket.
 
 ## How it works
 
-Hopscotch is a static site. There is no backend at request time — the page
-reads snapshots and renders them.
+Hopscotch is a static site. The browser reads agency snapshots and renders them. It polls every 15 seconds while visible; the collector normally publishes about every 30 seconds. GitHub Actions scheduling and upstream feed delays can create gaps. The app expires live predictions and positions after three minutes, then uses explicitly labeled timetable departures.
 
 | File | Branch | Written by | Contents |
 | --- | --- | --- | --- |
 | `data/static.json` | `main` | `build_static.py` | Routes, stops, per-direction shapes, service calendar, Hop lines |
-| `data/hotroutes.json` | `main` | by hand | His saved trips (school, lake) as stop-to-stop legs |
+| `data/hotroutes.json` | `main` | by hand | Public route examples (Marquette, lakefront) as stop-to-stop legs |
 | `data/tt-*.json` | `main` | `build_static.py` | Per-route timetable packs |
 | `live.json` | `data` | `collector.py` | Vehicle positions, stop predictions, service alerts |
 
@@ -48,3 +47,34 @@ python3 build_static.py /tmp/gtfs.zip
 
 This rewrites `data/static.json` and `data/tt-*.json` in place. Commit the
 result to `main`; the collector reads these files on its next run.
+
+## Personal transit features
+
+- Save any bus or streetcar stop to a departure board on Home. Saves stay on this device.
+- Search route numbers, stop names, or stop IDs. Open a route to save it or choose one of its stops.
+- Switch the public Marquette and lakefront route examples between outbound and return trips. Predictions must serve the boarding stop **before** the destination; return trips use the opposite-side stop IDs.
+- Open Nearby to see stops within 1.5 km of the map center. The location button centers the map on your location after browser permission.
+- Follow a bus or streetcar's reported GPS position. Positions are never extrapolated beyond the agency report. A missing signal does not confirm a cancellation.
+- Route lines show published alignments, which may differ during detours. Service alerts retain closed-stop details; consult the linked agency information when data is unavailable.
+
+The map uses the bundled Leaflet 1.9.4 renderer, OpenStreetMap data and CARTO raster tiles, so it does not require WebGL. A map-tile outage does not prevent searching for departure boards.
+
+## Data correctness
+
+`transit.js` handles Central-time service dates (including after-midnight GTFS times), explicit calendar exceptions, destination eligibility, cancellation/skipped-stop suppression and live/schedule merging by trip instance. Schema-2 snapshots separate realtime predictions from timetable fallback. Legacy mixed snapshots are treated as schedule-only.
+
+The collector preserves independent source timestamps and partial failures. The Hop's `VehicleEstimates` are live predictions; its `ScheduledTimes` remain labeled scheduled. Streetcar predictions are attached to stops, never to an unrelated selected car.
+
+The timetable builder retains all trip patterns and per-trip destinations, including short turns and branches. The daily **Refresh published timetables** workflow refreshes the agency GTFS data. Dates outside the published calendar show a warning instead of guessing weekday service. GitHub Actions may delay scheduled jobs; it is not a guaranteed always-on backend.
+
+## Checks
+
+```sh
+npm ci
+npm test
+pip install gtfs-realtime-bindings protobuf
+python3 -m unittest discover -s tests -v
+python3 -m py_compile collector.py build_static.py
+```
+
+CI runs the same checks for pull requests. The collector's existing SMS watches are preserved; no new notification subscriptions are created by the app.

@@ -2,11 +2,13 @@
 """Build Hopscotch static data files from the MCTS GTFS zip + Hop TransLoc API.
 Outputs into ./data/. Run: python3 build_static.py /path/to/google_transit.zip
 """
-import csv, json, math, sys, urllib.request, zipfile
+import csv, json, math, sys, urllib.request, zipfile, os
+from datetime import datetime, timedelta, timezone
 from collections import Counter, defaultdict
 
 GTFS = sys.argv[1] if len(sys.argv) > 1 else "/tmp/gtfs.zip"
 OUT = "data"
+os.makedirs(OUT, exist_ok=True)
 
 def read_csv(z, name):
     with z.open(name) as f:
@@ -61,12 +63,23 @@ for s in read_csv(z, "stops.txt"):
 STATIC["stops"] = [[sid] + v for sid, v in sorted(stops.items(), key=lambda kv: int(kv[0]) if kv[0].isdigit() else 10**9)]
 print(f"stops: {len(stops)}")
 
-# calendar (exception_type 1 = service runs that date)
-cal = defaultdict(list)
-for c in read_csv(z, "calendar_dates.txt"):
-    if c["exception_type"] == "1":
-        cal[c["date"]].append(c["service_id"])
+# Expand both regular weekly service and date exceptions; never guess by month.
+cal = defaultdict(set)
+if "calendar.txt" in z.namelist():
+    for c in read_csv(z, "calendar.txt"):
+        day = datetime.strptime(c["start_date"], "%Y%m%d")
+        end = datetime.strptime(c["end_date"], "%Y%m%d")
+        while day <= end:
+            if c[day.strftime("%A").lower()] == "1": cal[day.strftime("%Y%m%d")].add(c["service_id"])
+            day += timedelta(days=1)
+for c in (read_csv(z, "calendar_dates.txt") if "calendar_dates.txt" in z.namelist() else []):
+    services = cal[c["date"]]
+    if c["exception_type"] == "1": services.add(c["service_id"])
+    else: services.discard(c["service_id"])
 STATIC["calendar"] = {d: sorted(v) for d, v in sorted(cal.items())}
+STATIC["generated_at"] = int(datetime.now(timezone.utc).timestamp())
+STATIC["valid_from"] = min(cal) if cal else None
+STATIC["valid_until"] = max(cal) if cal else None
 print(f"calendar dates: {len(cal)}")
 
 # trips
@@ -108,16 +121,16 @@ for (rid, d), votes in shape_votes.items():
 STATIC["shapes"] = shapes_out
 print(f"shapes: routes={len(shapes_out)}")
 
-# timetables per route: top 2 stop-patterns per direction
+# Timetables: retain every branch, short turn and school-day pattern.
 by_rd = defaultdict(list)  # (route,dir) -> [trip_id]
 for tid, t in trips.items():
     if tid in st: by_rd[(t["r"], t["d"])].append(tid)
 
-per_route = defaultdict(lambda: {"stops": {}, "headsign": {}, "services": [], "trips": []})
+per_route = defaultdict(lambda: {"stops": {}, "headsign": {}, "services": [], "trips": [], "trip_headsign": {}})
 stop_routes = defaultdict(set)
 for (rid, d), tids in by_rd.items():
     patterns = Counter(tuple(sid for _, sid, _ in st[tid]) for tid in tids)
-    top = patterns.most_common(2)
+    top = patterns.most_common()
     headsign = Counter(trips[tid]["h"] for tid in tids).most_common(1)[0][0]
     per_route[rid]["headsign"][d] = headsign.title().replace("To ", "To ")
     for vi, (pat, _) in enumerate(top):
@@ -134,12 +147,13 @@ for (rid, d), tids in by_rd.items():
                     per_route[rid]["services"].append(svc)
                 times = [sec for _, _, sec in st[tid]]
                 deltas = [times[0]] + [b - a for a, b in zip(times, times[1:])]
-                per_route[rid]["trips"].append([int(tid), svcmap[svc], key, deltas])
+                per_route[rid]["trips"].append([str(tid), svcmap[svc], key, deltas])
+                per_route[rid]["trip_headsign"][str(tid)] = trips[tid]["h"]
 
 for rid, data in per_route.items():
     data.pop("_svcmap", None)
-# chunk into 8 balanced packs
-N = 8
+# Chunk into small balanced packs for mobile connections.
+N = 12
 chunks = [dict() for _ in range(N)]
 sizes = [0] * N
 for rid in sorted(per_route, key=lambda r: -len(json.dumps(per_route[r]))):
@@ -158,24 +172,29 @@ STATIC["stop_routes"] = {k: sorted(v) for k, v in stop_routes.items()}
 def fetch(url):
     with urllib.request.urlopen(url, timeout=20) as r: return json.load(r)
 base = "https://thehopmke.transloc.com/Services/JSONPRelay.svc"
-hops = fetch(f"{base}/GetRoutes?isPublicMap=true")
-hopstops = fetch(f"{base}/GetStops?isPublicMap=true")
-hop = {"routes": [], "stops": [], "lines": {}}
-route_ids_with_stops = {s["RouteID"] for s in hopstops}
-for r in hops:
-    if r["RouteID"] in route_ids_with_stops:
-        hop["routes"].append({"id": r["RouteID"], "name": r["Description"].replace(" THE HOP", ""),
-                              "color": (r.get("MapLineColor") or "#8F7B25").lstrip("#")})
-for rid in [r["id"] for r in hop["routes"]]:
-    sline = [s for s in hopstops if s["RouteID"] == rid]
-    line = []
-    for s in sline:
-        hop["stops"].append({"id": s["RouteStopID"], "route": rid, "name": s["Description"],
-                             "lat": round(s["Latitude"], 6), "lon": round(s["Longitude"], 6)})
-        pts = [(round(p["Latitude"], 6), round(p["Longitude"], 6)) for p in s.get("MapPoints", [])]
-        if pts and line and pts[0] == line[-1]: pts = pts[1:]
-        line += pts
-    hop["lines"][str(rid)] = line
+try:
+    hops = fetch(f"{base}/GetRoutes?isPublicMap=true")
+    hopstops = fetch(f"{base}/GetStops?isPublicMap=true")
+    hop = {"routes": [], "stops": [], "lines": {}}
+    route_ids_with_stops = {s["RouteID"] for s in hopstops}
+    for r in hops:
+        if r["RouteID"] in route_ids_with_stops and r.get("IsVisibleOnMap", True):
+            hop["routes"].append({"id": r["RouteID"], "name": r["Description"].replace(" THE HOP", ""),
+                                  "color": (r.get("MapLineColor") or "#8F7B25").lstrip("#")})
+    for rid in [r["id"] for r in hop["routes"]]:
+        sline = [s for s in hopstops if s["RouteID"] == rid]
+        line = []
+        for s in sline:
+            hop["stops"].append({"id": s["RouteStopID"], "route": rid, "name": s["Description"],
+                                 "lat": round(s["Latitude"], 6), "lon": round(s["Longitude"], 6)})
+            pts = [(round(p["Latitude"], 6), round(p["Longitude"], 6)) for p in s.get("MapPoints", [])]
+            if pts and line and pts[0] == line[-1]: pts = pts[1:]
+            line += pts
+        hop["lines"][str(rid)] = line
+except Exception as e:
+    with open(f"{OUT}/static.json") as previous: hop = json.load(previous).get("hop")
+    if not hop: raise
+    print(f"Hop static unavailable; retaining previous geometry: {e}")
 STATIC["hop"] = hop
 print(f"hop: routes={len(hop['routes'])} stops={len(hop['stops'])}")
 

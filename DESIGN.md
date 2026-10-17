@@ -19,14 +19,9 @@ position with a mock value. Where the feed carries nothing, the interface says
 so ("No bus to follow", "No live departures", scheduled times labelled
 "Scheduled").
 
-Two values on screen are derived rather than read directly, both from live
-fields:
+Freshness uses agency and per-vehicle timestamps, never the time a snapshot was downloaded. Reports older than three minutes are removed from the live display. Between reports, markers stay at the last reported GPS coordinates. Trip headsigns come from the exact static trip when available.
 
-- **Direction assignment.** A vehicle is placed on one of a route's two
-  alignments by comparing its trip's GTFS direction, falling back to nearest
-  shape.
-- **Stop freshness.** A vehicle unseen for 2+ minutes renders dimmed; one gone
-  for 3+ minutes is removed.
+The October 2026 reliability update adds personal stop boards, route shortcuts, always-visible commute direction controls and readable scheduled fallback. The map uses a raster renderer so WebGL failure cannot strand the user on a blank map.
 
 ## Interface rules
 - **No emoji and no typographic dingbats as iconography.** Every icon is an

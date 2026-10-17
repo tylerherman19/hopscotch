@@ -12,6 +12,8 @@ import json, os, smtplib, subprocess, sys, time, urllib.error, urllib.request
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from zoneinfo import ZoneInfo
+from concurrent.futures import ThreadPoolExecutor
+import re
 
 from google.transit import gtfs_realtime_pb2 as gtfs
 
@@ -19,7 +21,7 @@ CT = ZoneInfo("America/Chicago")
 RT = "https://realtime.ridemcts.com/gtfsrt"
 HOP = "https://thehopmke.transloc.com/Services/JSONPRelay.svc"
 LIVE = "live"
-POLL_SECS = 25
+POLL_SECS = 15
 PUSH_SECS = 30
 ARCHIVE_EVERY = 15 * 60
 GHOST_GRACE_SECS = 12 * 60
@@ -100,12 +102,10 @@ def plain_alert(entity):
     head = txt(a.header_text) if a.HasField("header_text") else ""
     desc = txt(a.description_text) if a.HasField("description_text") else ""
     effect = gtfs.Alert.Effect.Name(a.effect).replace("_", " ").title() if a.effect else "Service Alert"
-    # strip stop-id jargon
-    import re
-    desc = re.sub(r"(Inactive|Active)\s+Stop\s+IDs?\s*[:\-]?\s*[\d,\s]*", "", desc, flags=re.I).strip()
-    if len(desc) > 320: desc = desc[:317].rsplit(" ", 1)[0] + "..."
+    # Preserve boarding and closed-stop details; riders need the full alert.
     if not head: head = f"Routes {', '.join(routes)}" if routes else "System alert"
-    return {"routes": routes, "effect": effect, "title": head, "text": desc}
+    periods = [{"start": p.start or 0, "end": p.end or 0} for p in a.active_period]
+    return {"routes": routes, "effect": effect, "title": head, "text": desc, "periods": periods}
 
 def status_line(vehicles, alerts, cfg):
     if not cfg.get("status_line", True): return ""
@@ -128,55 +128,95 @@ def poll_cycle(state):
     routes, calendar, stops_map, hop_static = load_static()
     ts = int(time.time())
 
-    veh_fm = fetch_feed("vehicles")
-    trip_fm = fetch_feed("trips")
-    try:
-        alert_fm = fetch_feed("alerts")
-        alerts = [plain_alert(e) for e in alert_fm.entity]
-    except Exception:
-        alerts = []
+    # A failed streetcar/alert/vehicle endpoint must not suppress other sources.
+    sources, feeds = {}, {}
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        jobs = {name: pool.submit(fetch_feed, name) for name in ("vehicles", "trips", "alerts")}
+        for name, job in jobs.items():
+            try:
+                fm = job.result()
+                stamp = int(fm.header.timestamp) or ts
+                sources[name] = {"ok": True, "ts": stamp}
+                feeds[name] = fm
+            except Exception as e:
+                sources[name] = {"ok": False, "ts": 0}
+                print(f"{name} unavailable: {e}", file=sys.stderr)
+    alerts = []
+    for e in feeds.get("alerts", gtfs.FeedMessage()).entity:
+        if not e.HasField("alert") or e.is_deleted: continue
+        a = plain_alert(e)
+        if not a["periods"] or any((not p["start"] or p["start"] <= ts) and (not p["end"] or ts < p["end"]) for p in a["periods"]):
+            alerts.append(a)
 
-    # trip updates: per-trip delay (vs static schedule) + per-stop predictions
     trip_index = state.get("trip_index", {})
-    mid = midnight_epoch(today_key())
-    delay_samples = {}
     trip_delay, trip_next, stop_preds, seen_trips = {}, {}, {}, set()
-    for e in trip_fm.entity:
+    canceled, skipped, passed = [], {}, {}
+    for e in feeds.get("trips", gtfs.FeedMessage()).entity:
+        if e.is_deleted or not e.HasField("trip_update"): continue
         tu = e.trip_update
         tid = tu.trip.trip_id
+        day = tu.trip.start_date or today_key()
+        key = tid + "|" + day
+        if tu.trip.schedule_relationship == gtfs.TripDescriptor.CANCELED:
+            canceled.append(key)
+            continue
         seen_trips.add(tid)
-        fut = []
+        fut, delays = [], []
         sched = trip_index.get(tid)
+        if not tu.trip.start_date and sched:
+            day = sched.get("day", day)
+            # MCTS omits start_date: match an absolute stop event to the closest
+            # service-day instance so 25:00 trips retain yesterday's date.
+            for update in tu.stop_time_update:
+                event = update.departure if update.HasField("departure") else update.arrival if update.HasField("arrival") else None
+                if event is None or not event.HasField("time") or update.stop_id not in sched["stops"]: continue
+                seconds = sched["t"][sched["stops"].index(update.stop_id)]
+                candidates = [(now_ct() + timedelta(days=n)).strftime("%Y%m%d") for n in (-1,0,1)]
+                day = min(candidates,key=lambda d:abs(event.time-service_origin(d)-seconds))
+                break
+            key = tid + "|" + day
+        mid = service_origin(day)
+        rid = tu.trip.route_id or (sched or {}).get("route", "")
+        if tu.timestamp and ts-int(tu.timestamp) > 180: continue
         for u in tu.stop_time_update:
-            if u.HasField("arrival"):
-                at = u.arrival.time
-                if sched and u.stop_id in sched["stops"]:
-                    si = sched["stops"].index(u.stop_id)
-                    delay_samples.setdefault(tid, []).append(at - (mid + sched["t"][si]))
-                if at >= ts - 30 and u.stop_id:
-                    fut.append((u.stop_id, at))
-                    stop_preds.setdefault(u.stop_id, []).append([tu.trip.route_id, at - ts, at, tid])
+            sid = u.stop_id
+            if not sid: continue
+            if u.schedule_relationship == gtfs.TripUpdate.StopTimeUpdate.SKIPPED:
+                skipped.setdefault(sid, []).append(key); continue
+            if u.schedule_relationship == gtfs.TripUpdate.StopTimeUpdate.NO_DATA: continue
+            event = u.departure if u.HasField("departure") else u.arrival if u.HasField("arrival") else None
+            if event is None: continue
+            si = sched["stops"].index(sid) if sched and sid in sched["stops"] else None
+            at = int(event.time) if event.HasField("time") else (mid + sched["t"][si] + event.delay if si is not None and event.HasField("delay") else 0)
+            if not at: continue
+            if at < ts-15:
+                passed.setdefault(sid, []).append(key); continue
+            if at > ts+4*3600: continue
+            if event.HasField("delay"): delays.append(int(event.delay))
+            elif si is not None: delays.append(at - (mid + sched["t"][si]))
+            fut.append((sid, at))
+            stop_preds.setdefault(sid, []).append([rid, at-ts, at, tid, day])
         fut.sort(key=lambda x: x[1])
-        trip_next[tid] = [{"stop": s, "at": a, "in": a - ts,
-                           "name": stops_map.get(s, [""])[0]} for s, a in fut[:16]]
-    for tid, ds in delay_samples.items():
-        ds.sort()
-        trip_delay[tid] = ds[len(ds) // 2]
-    for sid in stop_preds:
-        stop_preds[sid] = sorted(stop_preds[sid], key=lambda x: x[2])[:3]
-    supplement_hot_stop_preds(stop_preds, calendar, ts)
+        trip_next[tid] = [{"stop": stop, "at": at, "in": at-ts, "name": stops_map.get(stop,[""])[0]} for stop, at in fut[:16]]
+        trip_delay[tid] = int(tu.delay) if tu.HasField("delay") else delays[0] if delays else None
+    for sid in stop_preds: stop_preds[sid] = sorted(stop_preds[sid],key=lambda x:x[2])[:16]
 
     vehicles = []
-    for e in veh_fm.entity:
+    for e in feeds.get("vehicles", gtfs.FeedMessage()).entity:
+        if e.is_deleted or not e.HasField("vehicle"): continue
         v = e.vehicle
-        if not v.HasField("position"): continue
+        stamp = int(v.timestamp) or sources["vehicles"]["ts"]
+        if not v.HasField("position") or ts-stamp > 180: continue
+        if v.trip.schedule_relationship == gtfs.TripDescriptor.CANCELED: continue
+        if not (-90 <= v.position.latitude <= 90 and -180 <= v.position.longitude <= 180): continue
         tid = v.trip.trip_id
         seen_trips.add(tid)
         vehicles.append({
-            "id": v.vehicle.id, "trip": tid, "route": v.trip.route_id,
-            "lat": round(v.position.latitude, 6), "lon": round(v.position.longitude, 6),
-            "bearing": int(v.position.bearing), "speed": round(v.position.speed, 1),
-            "delay": trip_delay.get(tid), "next": trip_next.get(tid, [])[:12],
+            "id": v.vehicle.id or e.id, "trip": tid, "route": v.trip.route_id,
+            "lat": round(v.position.latitude,6), "lon": round(v.position.longitude,6), "ts": stamp,
+            "bearing": int(v.position.bearing), "speed": round(v.position.speed,1),
+            "direction": int(v.trip.direction_id) if v.trip.HasField("direction_id") else None,
+            "delay": trip_delay.get(tid), "next": trip_next.get(tid,[])[:12],
         })
 
     # ghost detector
@@ -203,37 +243,46 @@ def poll_cycle(state):
         hv = fetch_json(f"{HOP}/GetMapVehiclePoints?isPublicMap=true")
         for v in hv:
             if not v.get("IsOnRoute"): continue
+            if int(v.get("Seconds") or 0) > 180: continue
             hop_vehicles.append({
                 "id": v["VehicleID"], "name": v["Name"], "route": v["RouteID"],
                 "lat": round(v["Latitude"], 6), "lon": round(v["Longitude"], 6),
                 "speed": round(v.get("GroundSpeed") or 0, 1), "heading": v.get("Heading") or 0,
                 "delayed": bool(v.get("IsDelayed")),
+                "ts": ts - max(0, int(v.get("Seconds") or 0)),
             })
         try:
             arr = fetch_json(f"{HOP}/GetRouteStopArrivals?isPublicMap=true")
             for s in arr:
-                times = [t for t in s.get("ScheduledTimes", [])]
                 parsed = []
-                for t in times:
-                    raw = t.get("ArrivalTimeUTC") or t.get("DepartureTimeUTC") or ""
-                    try:
-                        at = int(raw.split("(")[1].split(")")[0].split("-")[0].split("+")[0]) // 1000
-                    except (IndexError, ValueError):
-                        continue
-                    if at >= ts - 30: parsed.append(at)
-                if parsed:
-                    parsed.sort()
-                    hop_stops_out[str(s["RouteStopID"])] = [[a - ts, a] for a in parsed[:3]]
-        except Exception:
-            pass
-    except Exception:
+                # VehicleEstimates are predictions; ScheduledTimes are not live.
+                for estimate in s.get("VehicleEstimates", []):
+                    sec = estimate.get("SecondsToStop")
+                    if estimate.get("OnRoute") and isinstance(sec,(int,float)) and 0 <= sec <= 4*3600:
+                        parsed.append([sec, ts+int(sec), False, estimate.get("VehicleID")])
+                for t in s.get("ScheduledTimes", []):
+                    match = re.search(r"/Date\((\d+)", t.get("ArrivalTimeUTC") or t.get("DepartureTimeUTC") or "")
+                    if not match: continue
+                    at = int(match.group(1)) // 1000
+                    if ts <= at <= ts+4*3600: parsed.append([at-ts,at,True,None])
+                if parsed: hop_stops_out[str(s["RouteStopID"])] = sorted(parsed,key=lambda p:p[1])[:8]
+            sources["hop_arrivals"] = {"ok": True, "ts": ts}
+        except Exception as e:
+            sources["hop_arrivals"] = {"ok": False, "ts": 0}
+            print(f"Hop arrivals unavailable: {e}", file=sys.stderr)
+        sources["hop"] = {"ok": True, "ts": ts}
+    except Exception as e:
         hop_offline = True
+        sources["hop"] = {"ok": False, "ts": 0}
+        sources["hop_arrivals"] = {"ok": False, "ts": 0}
+        print(f"Hop unavailable: {e}", file=sys.stderr)
 
     late10 = sum(1 for v in vehicles if v.get("delay") and v["delay"] >= 600)
     cfg = load_json(f"{LIVE}/config.json", {"status_line": True, "sms_enabled": True})
     sms_ready = bool(cfg.get("sms_enabled", True) and os.environ.get("GMAIL_ADDRESS")
                      and os.environ.get("GMAIL_APP_PASSWORD"))
     live = {
+        "schema": 2, "sources": sources, "canceled": canceled, "skipped": skipped, "passed": passed,
         "sms_ready": sms_ready,
         "ts": ts, "status": status_line(vehicles, alerts, cfg),
         "vehicles": vehicles, "hop": hop_vehicles, "hop_offline": hop_offline,
@@ -331,7 +380,7 @@ def run_alerts(live, cfg, state, day):
                     k = f"ghost:{route}:{g['sched']}"
                     if not already(k):
                         if send_sms(phone, f"Hopscotch: ghost bus",
-                                    f"The {route} scheduled at {g['sched']} never showed."):
+                                    f"No live signal was received for the {route} scheduled at {g['sched']}. This does not confirm a cancellation."):
                             mark(k)
 
 # ---------- daily summary ----------
@@ -386,22 +435,13 @@ def build_daily(day=None):
 
 def ensure_data_branch():
     if not os.path.isdir(LIVE):
-        fr = subprocess.run(["git", "fetch", "origin", "data"], capture_output=True, text=True)
+        fr = subprocess.run(["git", "fetch", "--depth=1", "origin", "data"], capture_output=True, text=True)
         if fr.returncode == 0:
             subprocess.run(["git", "branch", "-f", "data", "FETCH_HEAD"], check=True)
             subprocess.run(["git", "worktree", "add", LIVE, "data"], check=True)
             return
-        r = subprocess.run(["git", "worktree", "add", LIVE, "data"], capture_output=True, text=True)
-        if r.returncode != 0:
-            subprocess.run(["git", "checkout", "--orphan", "data"], check=True)
-            subprocess.run(["git", "rm", "-rf", "."], capture_output=True)
-            os.makedirs(LIVE, exist_ok=True)
-            with open(f"{LIVE}/.gitkeep", "w") as f: f.write("")
-            subprocess.run(["git", "add", "-A"], check=True)
-            subprocess.run(["git", "commit", "-m", "init data branch"], check=True)
-            subprocess.run(["git", "push", "-u", "origin", "data"], check=True)
-            subprocess.run(["git", "checkout", "main"], check=True)
-            subprocess.run(["git", "worktree", "add", LIVE, "data"], check=True)
+        raise RuntimeError("Could not fetch the data branch; leaving the source checkout untouched")
+
 
 def push_live():
     for attempt in range(3):
@@ -415,54 +455,6 @@ def push_live():
         time.sleep(3)
     print("push failed after retries", file=sys.stderr)
 
-
-
-def supplement_hot_stop_preds(stop_preds, calendar, ts):
-    """RT feeds only carry in-service trips, so hot-route stops often show one
-    departure. Fill the 'one after' from the committed static timetable."""
-    hr = load_json("data/hotroutes.json", {})
-    legs = [l for r in hr.get("routes", []) for l in r.get("legs", []) if l.get("kind") == "bus"]
-    if not legs:
-        return
-    svcs = active_services(calendar, today_key())
-    mid = midnight_epoch(today_key())
-    secs_now = ts - mid
-    for leg in legs:
-        sid = str(leg.get("board") or "")
-        if not sid:
-            continue
-        existing = stop_preds.get(sid, [])
-        merged = list(existing)
-        for rid in leg.get("routes", []):
-            have = [p for p in existing if p[0] == rid]
-            need = 2 - len(have)
-            if need <= 0:
-                continue
-            tt = load_timetable_for(rid)
-            if not tt:
-                continue
-            svclist = tt.get("services", [])
-            stops_by_key = tt.get("stops", {})
-            for tr in tt.get("trips", []):
-                tid, si, key, deltas = tr
-                if si >= len(svclist) or svclist[si] not in svcs or not deltas:
-                    continue
-                slist = stops_by_key.get(key, [])
-                if sid not in slist:
-                    continue
-                t = decode_times(deltas)
-                at_secs = t[slist.index(sid)]
-                if at_secs < secs_now + 60:
-                    continue
-                at = mid + at_secs
-                # skip if an RT prediction for this route sits within 4 min (same trip)
-                if any(p[0] == rid and abs(p[2] - at) < 240 for p in merged):
-                    continue
-                merged.append([rid, at - ts, at, str(tid)])
-                need -= 1
-                if need <= 0:
-                    break
-        stop_preds[sid] = sorted(merged, key=lambda x: x[2])[:4]
 
 
 _tt_cache = {}
@@ -513,6 +505,10 @@ def today_trip_index(calendar, routes, datekey):
                 idx[str(tid)] = {"route": rid, "stops": tt["stops"][key], "t": decode_times(deltas)}
     return idx
 
+def service_origin(daykey):
+    d = datetime.strptime(daykey, "%Y%m%d").replace(hour=12, tzinfo=CT)
+    return int(d.timestamp()) - 12*3600
+
 def midnight_epoch(daykey):
     d = datetime(int(daykey[0:4]), int(daykey[4:6]), int(daykey[6:8]), tzinfo=CT)
     return int(d.timestamp())
@@ -523,7 +519,14 @@ def load_state():
     # scheduled trips with ids for ghost detection (rebuilt each job start)
     routes, calendar, _, _ = load_static()
     state["sched_ids"] = scheduled_trips_with_ids(calendar, routes, day)
-    state["trip_index"] = today_trip_index(calendar, routes, day)
+    yesterday = (now_ct() - timedelta(days=1)).strftime("%Y%m%d")
+    idx = today_trip_index(calendar, routes, yesterday)
+    for v in idx.values(): v["day"] = yesterday
+    current = today_trip_index(calendar, routes, day)
+    for v in current.values(): v["day"] = day
+    idx.update(current)
+    state["trip_index"] = idx
+    state["day"] = day
     n = now_ct()
     state["job_start"] = n.hour * 3600 + n.minute * 60 + n.second
     return state
@@ -551,6 +554,7 @@ def loop(minutes):
     last_push = 0
     while time.time() < end:
         try:
+            if state.get("day") != today_key(): state = load_state()
             poll_cycle(state)
         except Exception as e:
             print(f"poll error: {e}", file=sys.stderr)
