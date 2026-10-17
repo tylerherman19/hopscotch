@@ -306,11 +306,31 @@ function updateFeedStat(){
   $('schedule-warning').hidden=!S.ready||servicesAvailable();
   $('btn-refresh').disabled=S.polling;$('btn-refresh').textContent=S.polling?'Updating…':'Refresh';
 }
+async function currentSnapshot(){
+  let candidate=null, failure=null;
+  try { candidate=await fetchJson(LIVE_BASE+'live.json?t='+Math.floor(Date.now()/1000/15)); }
+  catch(e){failure=e;}
+  const needsRecovery=!candidate || !Transit.fresh(+candidate.ts) || (S.live && candidate.ts<S.live.ts);
+  // Raw branch URLs can stay cached for minutes. Resolve an immutable commit
+  // only when needed, at most once per 90 seconds across this device's tabs.
+  if(needsRecovery && Date.now()-store.get('hop_api_recovery',0)>=90000){
+    store.set('hop_api_recovery',Date.now());
+    try {
+      const ref=await fetchJson('https://api.github.com/repos/tylerherman19/hopscotch/git/ref/heads/data');
+      if(!/^[a-f0-9]{40}$/.test(ref.object?.sha||''))throw new Error('Invalid data revision');
+      const latest=await fetchJson('https://raw.githubusercontent.com/tylerherman19/hopscotch/'+ref.object.sha+'/live.json');
+      if(!candidate || latest.ts>candidate.ts)candidate=latest;
+    }catch(e){console.warn('Current revision lookup unavailable',e);}
+  }
+  if(S.live && (!candidate || S.live.ts>candidate.ts))candidate=S.live;
+  if(!candidate)throw failure||new Error('Live data unavailable');
+  return candidate;
+}
 async function refresh(){
   if(S.polling||!S.ready)return;
   clearTimeout(S.pollTimer);S.polling=true;updateFeedStat();
   try{
-    const live=await fetchJson(LIVE_BASE+'live.json?t='+Math.floor(Date.now()/1000/15));
+    const live=await currentSnapshot();
     if(!Number.isFinite(live.ts)||!Array.isArray(live.vehicles))throw new Error('Invalid live snapshot');
     S.live=live;S.fails=0;ingestVehicles();renderHome();
     if(S.selStop)renderStop();else if(S.selVeh)renderVehicle();
@@ -329,6 +349,7 @@ function tick(){
 }
 function renderSearch(q){
   const box=$('searchresults');q=q.trim().toLowerCase();
+  if(!S.ready){box.innerHTML='<div class="empty">Loading routes and stops…</div>';box.hidden=false;return;}
   const routes=S.routes.filter(r=>!q||String(r.name).toLowerCase().includes(q)||(r.long||'').toLowerCase().includes(q)).sort((a,b)=>(a.name.toLowerCase()===q?-1:0)-(b.name.toLowerCase()===q?-1:0)).slice(0,6);
   const stops=q?Object.entries(S.stops).filter(([id,s])=>id.toLowerCase()===q||s.name.toLowerCase().includes(q)||id.includes(q)).sort((a,b)=>(a[0]===q?-1:0)-(b[0]===q?-1:0)||distance(position(),[a[1].lat,a[1].lon])-distance(position(),[b[1].lat,b[1].lon])).slice(0,8):[];
   box.innerHTML=routes.map(r=>`<button class="sr-row" data-r="${esc(r.id)}"><span class="sr-badge">${esc(r.name)}</span><span>${esc(titleCase(r.long))}</span></button>`).join('')+stops.map(([id,s])=>`<button class="sr-row" data-stop="${esc(id)}"><svg><use href="#${hopStop(id)?'i-tram':'i-stop'}"/></svg><span>${esc(s.name)}<small>Stop ${esc(id)}</small></span></button>`).join('')||'<div class="empty">No matching routes or stops.</div>';
@@ -391,6 +412,7 @@ async function loadApp(){
     for(const s of st.hop?.stops||[])S.stops['H'+s.id]={name:s.name,lat:s.lat,lon:s.lon};
     try{S.hot=(await fetchJson('data/hotroutes.json')).routes||[];}catch{S.hot=[];}
     S.ready=true;
+    if($('searchinput').value.trim())renderSearch($('searchinput').value);
     renderHome();initMap();drawRouteLines();drawStops();
     // Timetable failure never prevents live polling or navigation.
     loadTtFor([...new Set([...S.hot.flatMap(t=>tripLeg(t)?.routes||[]),...S.favorites.flatMap(id=>S.stopRoutes[id]||[])])]).then(renderHome).catch(()=>toast('Some schedules could not load. Retry by opening the stop.'));

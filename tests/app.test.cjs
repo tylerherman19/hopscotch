@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const {JSDOM}=require('jsdom');
 const root=process.cwd();
-async function app({failSchedule=false,failLive=false,map=false}={}) {
+async function app({failSchedule=false,failLive=false,map=false,staleRaw=false}={}) {
   const html=fs.readFileSync('index.html','utf8').replace(/<script[^>]*src=[^>]*><\/script>/g,'');
   const dom=new JSDOM(html,{url:'https://example.org/hopscotch/#home',runScripts:'outside-only',pretendToBeVisual:true});
   const w=dom.window;
@@ -15,8 +15,11 @@ async function app({failSchedule=false,failLive=false,map=false}={}) {
   live.ts=fixed/1000;
   for(const source of Object.values(live.sources))source.ts=fixed/1000;
   for(const v of [...live.vehicles,...live.hop])v.ts=fixed/1000;
+  let apiCalls=0;
   w.fetch=async url=>{
-    if(String(url).includes('live.json')){if(failLive)throw new Error('offline');return {ok:true,json:async()=>live};}
+    if(String(url).includes('/git/ref/heads/data')){if(failLive)throw new Error('offline');apiCalls++;return {ok:true,json:async()=>({object:{sha:'a'.repeat(40)}})};}
+    if(String(url).includes('/'+ 'a'.repeat(40) +'/live.json'))return {ok:true,json:async()=>live};
+    if(String(url).includes('live.json')){if(failLive)throw new Error('offline');const raw=JSON.parse(JSON.stringify(live));if(staleRaw){raw.ts-=600;for(const source of Object.values(raw.sources))source.ts-=600;}return {ok:true,json:async()=>raw};}
     if(failSchedule&&String(url).includes('tt-'))throw new Error('timetable unavailable');
     return {ok:true,json:async()=>JSON.parse(fs.readFileSync(root+'/'+url))};
   };
@@ -24,7 +27,7 @@ async function app({failSchedule=false,failLive=false,map=false}={}) {
   w.eval(fs.readFileSync('transit.js','utf8'));
   w.eval(fs.readFileSync('app.js','utf8'));
   await new Promise(resolve=>setTimeout(resolve,120));
-  return {w,dom,errors,live};
+  return {w,dom,errors,live,apiCalls:()=>apiCalls};
 }
 test('startup, saved trip direction, stop saving and schedule board work without WebGL',async()=>{
  const {w,dom,errors}=await app();
@@ -81,6 +84,19 @@ test('raster map initializes, searches and selects routes without WebGL',async()
   assert.deepEqual(JSON.parse(w.localStorage.getItem('hop_pinned_routes')),['14']);
   assert.ok(w.document.querySelectorAll('#sh-stops [data-stop]').length>50);
   assert.ok(w.document.querySelectorAll('.leaflet-overlay-pane path').length>0);
+  assert.deepEqual(errors,[]);
+ }finally{dom.window.close();}
+});
+
+test('stale branch cache recovers by commit and never replaces newer data with older snapshots',async()=>{
+ const {w,dom,errors,apiCalls}=await app({staleRaw:true});
+ try {
+  assert.ok(w.document.getElementById('feed-status').classList.contains('live'));
+  assert.equal(apiCalls(),1);
+  w.document.getElementById('btn-refresh').click();
+  await new Promise(r=>setTimeout(r,60));
+  assert.equal(apiCalls(),1);
+  assert.ok(w.document.getElementById('feed-status').classList.contains('live'));
   assert.deepEqual(errors,[]);
  }finally{dom.window.close();}
 });
