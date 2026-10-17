@@ -6,9 +6,6 @@
 <title>Hopscotch · Milwaukee, live</title>
 <meta name="description" content="Real-time MCTS buses and The Hop streetcar, in your pocket.">
 <link rel="icon" href="favicon.svg">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap" rel="stylesheet">
 <link href="vendor/leaflet/leaflet.css" rel="stylesheet">
 <style>
 /* critical: keep icons icon-sized even if the external stylesheet is stale/missing */
@@ -32,6 +29,11 @@ svg.squiggle{width:100%;height:12px}
 .bigbtn svg{width:17px;height:17px}
 </style>
 <link rel="stylesheet" href="styles.css?v=20261017-3">
+<meta name="theme-color" content="#1c3028">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="transit-ui.css?v=20261017-1">
 </head>
 <body>
 
@@ -55,7 +57,7 @@ svg.squiggle{width:100%;height:12px}
   </defs>
 </svg>
 
-<div id="app">
+<div id="app" data-screen="home">
 
   <!-- ================= HOME ================= -->
   <main id="screen-home" class="screen on">
@@ -63,28 +65,32 @@ svg.squiggle{width:100%;height:12px}
       <header class="topbar">
         <div>
           <div class="wordmark">Hopscotch<svg class="squiggle" viewBox="0 0 120 12" aria-hidden="true"><path d="M3 8 C 20 2, 35 11, 52 6 S 85 3, 117 7" fill="none" stroke="#34c759" stroke-width="3.2" stroke-linecap="round"/></svg></div>
-          <div class="tagline">Milwaukee, live.</div>
+          <div class="tagline">Milwaukee, at your pace.</div>
         </div>
         <button id="btn-settings" class="iconbtn" aria-label="Settings"><svg><use href="#i-gear"/></svg></button>
       </header>
 
-      <button id="introcard" class="introcard">
-        <svg class="intro-ic"><use href="#i-bus"/></svg>
-        <span>Real-time MCTS buses and The&nbsp;Hop streetcar, in your pocket.</span>
-        <svg class="chev"><use href="#i-chev"/></svg>
-      </button>
-
+      <button id="where-to" class="where-to"><svg><use href="#i-search"/></svg><span>Where to?</span><small>Plan a trip</small></button>
+      <button id="introcard" class="introcard" hidden><span>Explore the transit map</span></button>
       <div class="feed-bar"><span id="feed-status">Connecting to transit feeds…</span><button id="btn-refresh">Refresh</button></div>
       <div id="start-error" class="error-card" hidden>Route data could not load. Check your connection. <button id="retry-start">Try again</button></div>
       <p id="schedule-warning" class="error-card" hidden>Today's date is outside the published timetable. Only current live predictions are available.</p>
-      <div class="sect"><h2>Saved stops</h2></div>
+      <section class="nearby-section" aria-label="Nearby departures">
+        <div class="nearby-heading"><div><h1>Catch your next ride.</h1><p id="nearby-location">Around Downtown Milwaukee</p></div><button id="home-locate" aria-label="Use my location" class="home-locate"><svg><use href="#i-nav"/></svg></button></div>
+        <div class="near-filters" role="group" aria-label="Nearby transit filter"><button data-near-filter="all" aria-pressed="true">All lines</button><button data-near-filter="saved" aria-pressed="false">Saved</button><button data-near-filter="hop" aria-pressed="false">The Hop</button></div>
+        <div id="nearby-lines" aria-label="Nearby route arrivals"></div>
+      </section>
+      <div class="sect"><h2>Saved stops</h2><span class="section-hint">On this device</span></div>
       <div id="favorites"></div>
       <div id="pinned-routes" class="route-chips" aria-label="Saved routes"></div>
+      <div class="sect"><h2>Your journeys</h2></div><div id="personal-journeys"></div>
+      <details class="example-trips"><summary>Explore local trips</summary>
       <div class="sect">
         <h2>Suggested trips</h2>
         <button id="btn-edit" class="linkbtn">Edit</button>
       </div>
       <div id="saved"></div>
+      </details>
 
       <div class="sect">
         <h2>Service updates</h2>
@@ -93,6 +99,23 @@ svg.squiggle{width:100%;height:12px}
       <div id="updates"></div>
 
       <p class="datacredit">MCTS + The Hop agency feeds · Checked every 15 seconds while open. Times are Central. Scheduled departures are estimates, not live tracking.</p>
+    </div>
+  </main>
+
+  <main id="screen-plan" class="screen">
+    <div class="scroll plan-scroll">
+      <header class="planner-header"><span class="eyebrow">HOPSCOTCH / MILWAUKEE</span><h1>Find your way.</h1><p>A good trip starts with a clear plan.</p></header>
+      <form id="trip-form" autocomplete="off">
+        <div class="endpoint-card">
+          <div class="endpoint-wrap"><label for="plan-from">From</label><input id="plan-from" placeholder="Starting point or stop number" autocomplete="off"><div id="picker-from" class="place-picker" hidden></div></div>
+          <button id="plan-swap" class="swap-endpoints" type="button" aria-label="Swap starting point and destination"><svg><use href="#i-nav"/></svg></button>
+          <div class="endpoint-wrap"><label for="plan-to">To</label><input id="plan-to" placeholder="Destination or stop number" autocomplete="off"><div id="picker-to" class="place-picker" hidden></div></div>
+        </div>
+        <div class="plan-controls"><button id="planner-location" type="button"><svg><use href="#i-nav"/></svg>Use my location</button><span>Leave now</span></div>
+        <button type="submit" class="plan-submit" id="plan-submit">Find a trip</button>
+      </form>
+      <p class="planning-coverage">Choose a stop or featured destination. Featured places use a nearby stop. Direct bus and live streetcar trips, plus one-transfer bus trips. Walking times are approximate.</p>
+      <div id="plan-status" role="status"></div><div id="plan-results"></div>
     </div>
   </main>
 
@@ -116,7 +139,7 @@ svg.squiggle{width:100%;height:12px}
 
     <div class="segwrap">
       <div class="seg" role="group" aria-label="Map view">
-        <button class="segbtn on" data-view="buses"><svg><use href="#i-bus"/></svg>Buses</button>
+        <button class="segbtn on" data-view="buses"><svg><use href="#i-bus"/></svg>All lines</button>
         <button class="segbtn" data-view="hop"><svg><use href="#i-tram"/></svg>The Hop</button>
         <button class="segbtn" data-view="nearby"><svg><use href="#i-pin"/></svg>Nearby</button>
       </div>
@@ -158,8 +181,9 @@ svg.squiggle{width:100%;height:12px}
 
   <!-- ================= TAB BAR ================= -->
   <nav id="tabbar">
-    <button class="tabbtn on" data-screen="home"><svg><use href="#i-home"/></svg><span>Home</span></button>
+    <button class="tabbtn on" data-screen="home"><svg><use href="#i-home"/></svg><span>Nearby</span></button>
     <button class="tabbtn" data-screen="map"><svg><use href="#i-map"/></svg><span>Map</span></button>
+    <button class="tabbtn" data-screen="plan"><svg><use href="#i-nav"/></svg><span>Plan</span></button>
   </nav>
 
   <!-- ================= SETTINGS ================= -->
@@ -178,6 +202,8 @@ svg.squiggle{width:100%;height:12px}
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="transit.js?v=20261016-1"></script>
-<script src="app.js?v=20261017-3"></script>
+<script src="journey.js?v=20261017-1"></script>
+<script src="app.js?v=20261017-4"></script>
+<script src="experience.js?v=20261017-1"></script>
 </body>
 </html>

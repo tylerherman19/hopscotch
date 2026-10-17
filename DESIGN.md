@@ -1,16 +1,12 @@
 # Hopscotch UI contract
 
-## Source
-The September 21, 2026 two-screen Home / Map mockup supplied by Tyler is the
-visual source of truth ("Needs to be this. Fully go."). The earlier
-September 15 mockup is superseded. No Alerts tab: saved routes live on Home
-and MCTS service updates fold into Home as their own section.
+## Source and direction
 
-## Direction
-Light iOS-native transit utility. White background, iOS system type, one green
-(live times + healthy status), one blue (buttons, links, route lines), red for
-late, yellow star for saved. Home prioritises his saved routes; Map prioritises
-live vehicles.
+The October 17, 2026 request to bring Hopscotch closer to Transit is the current product direction. Preserve Hopscotch's own identity while adopting a nearby-first arrival board, large readable departure times, agency route colors, a prominent destination entry point and clear mobile navigation.
+
+Three views: Nearby, Map, Plan. Nearby prioritizes actual route/direction arrivals, followed by device-saved stops and journeys. On desktop, discovery and planning sit alongside the live map. Service updates remain part of Nearby.
+
+Use a warm white surface, dark green ink, a restrained lime action color and system typography. Colored route badges identify real services. Route details list stops in travel order and offer an explicit direction selector.
 
 ## Data honesty
 Use `data/static.json` + `data/hotroutes.json` and the `data` branch's
@@ -34,3 +30,9 @@ The October 2026 reliability update adds personal stop boards, route shortcuts, 
 - GTFS's ALL-CAPS stop and headsign strings are title-cased for display.
 - Motion is suppressed under `prefers-reduced-motion` and the Reduce motion
   setting.
+
+## Journey planning
+
+Journeys are computed from service calendars and the exact stop order/times of published trips, supplemented by fresh reported predictions. Bus options are direct or have one transfer with a two-minute buffer plus estimated walking between stops up to 180 m apart. Direct Hop options require matching live vehicle estimates at both stops on the same line. Do not synthesize streetcar schedules or promise alighting alerts.
+
+Walking access uses distance-based estimates and must be labelled approximate. A reported boarding estimate does not make a derived arrival a live prediction. Saved journeys are stored only in this browser; never commit personal starting points, destinations or labels to the repository.

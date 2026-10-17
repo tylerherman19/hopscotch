@@ -86,7 +86,7 @@ function initMap() {
   S.map.getContainer().append(S.slayer,S.vlayer);
   L.DomEvent.disableClickPropagation(S.slayer); L.DomEvent.disableClickPropagation(S.vlayer);
   S.map.on('move zoom',positionOverlays);
-  S.map.on('moveend zoomend',()=>{drawStops();if(S.view==='nearby') renderNearby();});
+  S.map.on('moveend zoomend',()=>{drawStops();renderNearby();});
   S.map.on('dragstart',()=>{if(S.followId)stopFollow();});
   S.map.on('click',()=>{if(S.selStop||S.selVeh)clearSelection();});
   S.mapReady=true;
@@ -103,9 +103,10 @@ function drawRouteLines() {
   S.lines.clearLayers();
   for(const rid of routeIdsOnMap()) {
     const shapes=rid==='HOP'?S.static?.hop?.lines:S.static?.shapes[rid];
-    for(const pts of Object.values(shapes||{})) {
+    for(const [dir,pts] of Object.entries(shapes||{})) {
+      if(S.isoRoute&&S.routeDir!=null&&String(dir)!==String(S.routeDir))continue;
       if(pts.length<2)continue;
-      L.polyline(pts,{color:rid==='HOP'?'#1e8e3e':'#0a84ff',weight:S.isoRoute?4:2.5,opacity:S.isoRoute?0.85:0.48}).addTo(S.lines).on('click',e=>{L.DomEvent.stopPropagation(e);showRoute(rid);});
+      L.polyline(pts,{color:window.Experience?Experience.color(rid).bg:rid==='HOP'?'#1e8e3e':'#0a84ff',weight:S.isoRoute?4:2.5,opacity:S.isoRoute?0.85:0.48}).addTo(S.lines).on('click',e=>{L.DomEvent.stopPropagation(e);showRoute(rid);});
     }
   }
 }
@@ -134,7 +135,7 @@ function drawStops() {
   positionOverlays();
 }
 function positionOverlays() {
-  if(!S.map||S.screen!=='map')return;
+  if(!S.map||!(S.screen==='map'||matchMedia('(min-width: 1000px)').matches))return;
   S.slayer?.querySelectorAll('[data-sid], [data-me]').forEach(el=>{
     const s=S.stops[el.dataset.sid],ll=el.dataset.me?S.mePos:[s.lat,s.lon];
     const p=S.map.latLngToContainerPoint(ll);el.style.transform=`translate(${p.x}px,${p.y}px)`;
@@ -172,6 +173,7 @@ function ingestVehicles() {
       }
       Object.assign(v,{v:raw,route:isHop?'HOP':String(raw.route),hop:isHop,ts});
       v.el.innerHTML=`<svg><use href="#${isHop?'i-tram':'i-bus'}"/></svg><span class="vnum">${esc(isHop?'H':raw.route)}</span>`;
+      if(window.Experience){const c=Experience.color(v.route);v.el.style.backgroundColor=c.bg;v.el.style.color=c.ink;}
       v.el.setAttribute('aria-label',(isHop?'Hop streetcar ':'Route '+raw.route+' bus ')+raw.id);
     }
   }
@@ -199,6 +201,7 @@ function sheet(title,sub,icon='i-stop') {
 }
 function pinButton(sid) {return `<button class="board-action" id="pin-stop"><svg><use href="#i-star"/></svg>${S.favorites.includes(sid)?'Remove saved stop':'Save this stop'}</button>`;}
 function renderRoute(rid) {
+  if(window.Experience){Experience.routeDetails(rid);return;}
   sheet(rid==='HOP'?'The Hop':'Route '+rid,rid==='HOP'?'Streetcar routes':titleCase(S.routeById[rid]?.long||''),'i-bus');
   const saved=S.pinnedRoutes.includes(rid),count=[...S.veh.values()].filter(v=>v.route===rid).length;
   $('sh-stops').innerHTML=`<button class="board-action" id="pin-route"><svg><use href="#i-star"/></svg>${saved?'Unsave route':'Save route'}</button><p class="board-note">${count} vehicles reporting · Choose a stop for departures. Lines show the published route; detours may differ.</p>`+
@@ -223,12 +226,13 @@ function renderStop() {
   $('sh-stops').innerHTML=pinButton(sid)+`<div class="board-note">${(S.stopRoutes[sid]||[]).map(esc).join(' · ')}${hopStop(sid)?'Streetcar stop':''}</div>`+
     (departureRows(list)||`<div class="empty">${esc(noDepartures(sid))}</div>`)+
     `<a class="board-action" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${S.stops[sid].lat},${S.stops[sid].lon}&travelmode=walking">Walking directions to this stop</a>`;
+  window.Experience?.decorateStop(sid);
   $('pin-stop').onclick=()=>{S.favorites=S.favorites.includes(sid)?S.favorites.filter(x=>x!==sid):[...S.favorites,sid];store.set('hop_favorites',S.favorites);renderStop();renderFavorites();};
 }
 function nextStops(v) {return freshSource('trips')?(v.v.next||[]).filter(n=>n.at>=Date.now()/1000-15):[];}
 async function selectVehicle(id) {
   const v=S.veh.get(id);if(!v)return;
-  S.selVeh=id;S.selStop=null;S.followId=null;S.isoRoute=v.route;S.view=v.hop?'hop':'buses';syncView();
+  S.selVeh=id;S.selStop=null;S.followId=null;S.routeDir=null;S.isoRoute=v.route;S.view=v.hop?'hop':'buses';syncView();
   drawRouteLines();drawStops();renderVehicle();moveMap([v.v.lat,v.v.lon],Math.max(S.map?.getZoom()||14,15));
   if(!v.hop)try {await loadTtFor([v.route]);if(S.selVeh===id)renderVehicle();}catch {toast('Destination details unavailable.');}
 }
@@ -247,7 +251,7 @@ function renderVehicle() {
   wireStopChoices($('sh-stops'));
   $('callout').hidden=false;$('co-num').textContent=v.hop?'H':v.route;$('co-head').textContent=hs||'Position only';$('co-eta').textContent='GPS '+ageText(v.ts);positionOverlays();
 }
-function clearSelection() {S.selStop=null;S.selVeh=null;S.followId=null;S.isoRoute='';$('sheet').hidden=true;$('callout').hidden=true;drawRouteLines();drawStops();}
+function clearSelection() {S.routeDir=null;S.selStop=null;S.selVeh=null;S.followId=null;S.isoRoute='';$('sheet').hidden=true;$('callout').hidden=true;drawRouteLines();drawStops();}
 function stopFollow(){S.followId=null;$('sh-following').hidden=true;renderVehicle();}
 function startFollow(id){const v=S.veh.get(id);if(!v)return;S.followId=id;renderVehicle();moveMap([v.v.lat,v.v.lon]);toast(v.hop?'Following this streetcar.':'Following this bus.');}
 
@@ -275,6 +279,7 @@ function renderFavorites(){
   wireStopChoices($('favorites'));
 }
 function renderNearby(){
+  if(window.Experience){Experience.mapBoard();return;}
   const show=S.view==='nearby'&&S.screen==='map'&&!S.selStop&&!S.selVeh&&!S.isoRoute;
   $('nearby-panel').hidden=!show;if(!show)return;
   $('nearby-panel').innerHTML='<b>Stops near map center</b>'+nearbyStops().slice(0,6).map(([id,s,d])=>`<button class="stop-choice" data-stop="${esc(id)}"><span>${esc(s.name)}<small>${hopStop(id)?'The Hop':esc((S.stopRoutes[id]||[]).join(' / '))} · Stop ${esc(id)}</small></span><small>${Math.round(d)} m</small></button>`).join('');
@@ -290,7 +295,7 @@ function renderUpdates(){
     (known&&!alerts.length?'<div class="update-card good"><svg><use href="#i-check"/></svg><div><b>No alerts reported'+(S.allAlerts?'':' for your routes')+'</b><p>An empty alert feed does not guarantee on-time service.</p></div></div>':'')+
     `<div class="agency-links"><a target="_blank" rel="noopener" href="https://www.ridemcts.com/alerts">MCTS service alerts</a><a target="_blank" rel="noopener" href="https://thehopmke.com/">The Hop service information</a></div>`;
 }
-function renderHome(){renderSaved();renderPinned();renderFavorites();renderUpdates();}
+function renderHome(){renderSaved();renderPinned();renderFavorites();renderUpdates();window.Experience?.renderHome();renderNearby();}
 
 /* Actual feed timestamps determine freshness, never the browser download time. */
 function updateFeedStat(){
@@ -332,7 +337,7 @@ async function refresh(){
   try{
     const live=await currentSnapshot();
     if(!Number.isFinite(live.ts)||!Array.isArray(live.vehicles))throw new Error('Invalid live snapshot');
-    S.live=live;S.fails=0;ingestVehicles();renderHome();
+    S.live=live;S.fails=0;ingestVehicles();renderHome();window.Experience?.loadNearby();window.Experience?.onRefresh();
     if(S.selStop)renderStop();else if(S.selVeh)renderVehicle();
   }catch(e){S.fails++;console.warn('Live data unavailable',e);renderHome();}
   finally{S.polling=false;updateFeedStat();if(!document.hidden)S.pollTimer=setTimeout(refresh,S.fails?Math.min(120000,15000*2**S.fails):15000);}
@@ -340,7 +345,7 @@ async function refresh(){
 function tick(){
   updateFeedStat();
   const freshKey=['vehicles','trips','alerts','hop','hop_arrivals'].map(freshSource).join('|');
-  if(S.freshKey!==freshKey&&S.ready){S.freshKey=freshKey;renderHome();if(S.selStop)renderStop();else if(S.selVeh)renderVehicle();}
+  if(S.freshKey!==freshKey&&S.ready){S.freshKey=freshKey;renderHome();window.Experience?.onRefresh();if(S.selStop)renderStop();else if(S.selVeh)renderVehicle();}
   let expired=false;
   document.querySelectorAll('[data-at]').forEach(el=>{const sec=+el.dataset.at-Date.now()/1000;el.textContent=fmtIn(sec);if(sec < -15)expired=true;});
   if(expired&&S.ready){renderHome();if(S.selStop)renderStop();else if(S.selVeh)renderVehicle();}
@@ -363,16 +368,17 @@ function renderSearch(q){
   box.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{box.hidden=true;$('searchinput').value='';}));
 }
 function switchTab(name){
-  S.screen=name;document.querySelectorAll('.screen').forEach(el=>el.classList.toggle('on',el.id==='screen-'+name));
+  if(!['home','map','plan'].includes(name))name='home';
+  S.screen=name;$('app').dataset.screen=name;document.querySelectorAll('.screen').forEach(el=>el.classList.toggle('on',el.id==='screen-'+name));
   document.querySelectorAll('.tabbtn').forEach(b=>{b.classList.toggle('on',b.dataset.screen===name);b.setAttribute('aria-current',b.dataset.screen===name?'page':'false');});
   if(location.hash!=='#'+name)history.replaceState(null,'','#'+name);
-  if(name==='map'){initMap();if(S.map){S.map.invalidateSize();positionOverlays();}renderNearby();}
+  if(name==='map'||matchMedia('(min-width: 1000px)').matches){initMap();if(S.map){S.map.invalidateSize();positionOverlays();}renderNearby();}
 }
 function syncView(){document.querySelectorAll('.segbtn').forEach(b=>{b.classList.toggle('on',b.dataset.view===S.view);b.setAttribute('aria-pressed',b.dataset.view===S.view);});renderNearby();}
 function locate(){
   if(!navigator.geolocation){toast('Location is unavailable in this browser. You can still search for a stop.');return;}
   navigator.geolocation.getCurrentPosition(pos=>{
-    S.mePos=[pos.coords.latitude,pos.coords.longitude];moveMap(S.mePos,15);drawStops();renderNearby();
+    S.mePos=[pos.coords.latitude,pos.coords.longitude];moveMap(S.mePos,15);drawStops();renderNearby();window.Experience?.located();
   },err=>toast(err.code===1?'Location permission was denied. Search for a stop instead.':'Could not locate you. Search for a stop instead.'),{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
 }
 function wireUI(){
@@ -398,7 +404,7 @@ function wireUI(){
   $('sheetgrab').onclick=()=>$('sheet').classList.toggle('half');
   $('btn-refresh').onclick=refresh;
   $('retry-start').onclick=loadApp;
-  window.addEventListener('hashchange',()=>switchTab(location.hash==='#map'?'map':'home'));
+  window.addEventListener('hashchange',()=>switchTab(location.hash.slice(1)||'home'));
   document.addEventListener('visibilitychange',()=>{clearTimeout(S.pollTimer);if(!document.hidden){tick();refresh();}});
   window.addEventListener('online',refresh);window.addEventListener('offline',()=>{updateFeedStat();renderHome();});
 }
@@ -413,11 +419,11 @@ async function loadApp(){
     try{S.hot=(await fetchJson('data/hotroutes.json')).routes||[];}catch{S.hot=[];}
     S.ready=true;
     if($('searchinput').value.trim())renderSearch($('searchinput').value);
-    renderHome();initMap();drawRouteLines();drawStops();
+    renderHome();initMap();drawRouteLines();drawStops();window.Experience?.loadNearby();
     // Timetable failure never prevents live polling or navigation.
     loadTtFor([...new Set([...S.hot.flatMap(t=>tripLeg(t)?.routes||[]),...S.favorites.flatMap(id=>S.stopRoutes[id]||[])])]).then(renderHome).catch(()=>toast('Some schedules could not load. Retry by opening the stop.'));
     if(S.map)for(const v of S.veh.values())S.vlayer.append(v.el);
     await refresh();
   }catch(e){console.error('Startup failed',e);$('start-error').hidden=false;$('saved').innerHTML='';}
 }
-document.addEventListener('DOMContentLoaded',()=>{wireUI();switchTab(location.hash==='#map'?'map':'home');loadApp();setInterval(tick,1000);});
+document.addEventListener('DOMContentLoaded',()=>{wireUI();switchTab(location.hash.slice(1)||'home');loadApp();setInterval(tick,1000);});

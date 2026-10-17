@@ -1,0 +1,10 @@
+{
+  "name": "Hopscotch · Milwaukee Transit",
+  "short_name": "Hopscotch",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fbfcfa",
+  "theme_color": "#1c3028",
+  "icons": [{"src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}
